@@ -18,13 +18,14 @@
     <small class="helper-text">La búsqueda se actualiza en tiempo real mientras escribís.</small>
 </form>
 
-<form method="GET" action="{{ url_for('listar_envios') }}" class="search-form">
+<form method="GET" action="{{ url_for('listar_envios') }}" class="search-form" id="date-filter-form">
     <div class="search-bar">
-        <input type="date" name="date_from" value="{{ date_from }}" placeholder="Fecha desde">
-        <input type="date" name="date_to" value="{{ date_to }}" placeholder="Fecha hasta">
+        <input type="date" id="date-from" name="date_from" value="{{ date_from }}" placeholder="Fecha desde">
+        <input type="date" id="date-to" name="date_to" value="{{ date_to }}" placeholder="Fecha hasta">
         <button type="submit" class="btn btn-primary">Filtrar por fechas</button>
         {% if date_from or date_to %}<a href="{{ url_for('listar_envios') }}" class="btn btn-secondary">Limpiar fechas</a>{% endif %}
     </div>
+    <p id="date-error" class="helper-text" style="color:#f59e0b; display:none;">Rango de fechas inválido</p>
     <small class="helper-text">Filtrar envíos por rango de fechas de creación.</small>
 </form>
 

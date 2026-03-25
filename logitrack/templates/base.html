@@ -8,10 +8,24 @@
 </head>
 <body>
     {% if session.usuario %}
-    <nav class="navbar">
+    <div class="topbar">
+        <button id="sidebar-toggle" class="btn-sidebar-toggle" aria-label="Abrir menú">☰</button>
         <div class="nav-brand">
             <span class="brand-icon">◈</span>
             <span class="brand-name">LogiTrack</span>
+        </div>
+        <div class="nav-user">
+            <button id="theme-toggle" class="btn-theme-toggle" title="Cambiar tema">☀️</button>
+            <span class="user-badge">{{ session.rol }}</span>
+            <span class="user-name">{{ session.usuario }}</span>
+            <a href="{{ url_for('logout') }}" class="btn-logout">Salir</a>
+        </div>
+    </div>
+
+    <aside id="sidebar" class="sidebar" aria-hidden="true">
+        <div class="sidebar-header">
+            <span>Menú</span>
+            <button id="sidebar-close" class="btn-sidebar-close" aria-label="Cerrar menú">✕</button>
         </div>
         <ul class="nav-links">
             {% if session.rol == 'Supervisor' %}
@@ -31,13 +45,9 @@
             <li><a href="{{ url_for('hoja_ruta') }}" class="{% if request.endpoint == 'hoja_ruta' %}active{% endif %}">Hoja de ruta</a></li>
             {% endif %}
         </ul>
-        <div class="nav-user">
-            <button id="theme-toggle" class="btn-theme-toggle" title="Cambiar tema">☀️</button>
-            <span class="user-badge">{{ session.rol }}</span>
-            <span class="user-name">{{ session.usuario }}</span>
-            <a href="{{ url_for('logout') }}" class="btn-logout">Salir</a>
-        </div>
-    </nav>
+    </aside>
+
+    <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>
     {% endif %}
 
     <div class="flash-container">
