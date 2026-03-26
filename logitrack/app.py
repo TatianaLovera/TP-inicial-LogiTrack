@@ -576,7 +576,7 @@ def cargar_datos_ejemplo():
         envios.append(nuevo)
         registrar_auditoria(tracking, "Creación", "Registro de envío semilla.", "sistema")
 
-
+cargar_datos_ejemplo()
 if __name__ == "__main__":
-    cargar_datos_ejemplo()
+    
     app.run(debug=True)
