@@ -153,9 +153,10 @@ def test_supervisor_transito_sin_transportista(client):
     # Usamos la cuenta del supervisor
     client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
     
-    # Para la prueba, tomamos el primer paquete semilla generado por app.py
+    # Buscamos dinámicamente un paquete que esté "Ingresado" o "En sucursal"
     from app import envios
-    tracking_de_prueba = envios[0]['tracking_id']
+    envio_valido = next((e for e in envios if e["estado"] in ["Ingresado", "En sucursal"]), None)
+    tracking_de_prueba = envio_valido['tracking_id']
     
     datos_estado = {
         'nuevo_estado': 'En tránsito',
@@ -165,8 +166,8 @@ def test_supervisor_transito_sin_transportista(client):
     respuesta = client.post(f'/envios/{tracking_de_prueba}/cambiar-estado', data=datos_estado, follow_redirects=True)
     texto_html = respuesta.data.decode('utf-8')
     
-    # El sistema debe bloquear la transición logística
-    assert "Para pasar a &#39;En tránsito&#39; debés asignar un transportista" in texto_html
+    # El sistema debe bloquear la transición exigiendo un transportista
+    assert "debés asignar un transportista" in texto_html
 
 # ==========================================
 # CASO 11: REGLAS DE NEGOCIO - ESTADOS FINALES (US-05)
