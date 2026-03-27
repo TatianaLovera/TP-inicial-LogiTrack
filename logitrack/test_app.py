@@ -423,3 +423,63 @@ def test_detalle_transportista_espiando_paquete_ajeno(client):
     
     # Ahora sí, al no ser su paquete, el sistema debe echarlo
     assert "No tenés permisos para ver este envío" in texto_html
+
+# ==========================================
+# CASO 17: BÚSQUEDA Y FILTRADO - ATÓMICOS (US-04)
+# ==========================================
+
+def test_busqueda_tracking_id_exacto(client):
+    """Prueba AC1: Búsqueda exacta por Tracking ID"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+    
+    # Tomamos un ID real generado dinámicamente
+    from app import envios
+    tracking_buscado = envios[0]['tracking_id']
+    
+    respuesta = client.get(f'/envios?q={tracking_buscado}')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos que encuentre el paquete
+    assert tracking_buscado in texto_html
+    # Y verificamos que NO muestre la pantalla de "sin resultados"
+    assert "No se encontraron resultados" not in texto_html
+
+def test_busqueda_parcial_destinatario_insensitive(client):
+    """Prueba AC2: Búsqueda parcial y sin distinguir mayúsculas/minúsculas"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+    
+    # Buscamos "mArÍa" (mezcla intencional de mayúsculas/minúsculas y tildes)
+    # En app.py tenemos de destinatario a "María García"
+    respuesta = client.get('/envios?q=mArÍa')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El sistema backend (.lower()) debe saber emparejarlo
+    assert "María García" in texto_html
+
+def test_busqueda_filtros_combinados_fechas(client):
+    """Prueba AC3: Combinar búsqueda de texto con filtro de rango de fechas"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+    from app import envios
+    tracking_buscado = envios[0]['tracking_id']
+    
+    # Le mandamos por URL la query "q" + los campos "date_from" y "date_to"
+    # Usamos un rango de fechas amplio (2020 a 2030) para asegurar que el paquete entre
+    respuesta = client.get(f'/envios?q={tracking_buscado}&date_from=2020-01-01&date_to=2030-12-31')
+    
+    # El sistema no debe crashear por procesar ambos filtros juntos (200 OK)
+    assert respuesta.status_code == 200
+    texto_html = respuesta.data.decode('utf-8')
+    assert tracking_buscado in texto_html
+
+def test_busqueda_muestra_boton_limpiar(client):
+    """Prueba AC5: Comportamiento de la UI al tener un filtro activo"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+    
+    # Hacemos una búsqueda cualquiera
+    respuesta = client.get('/envios?q=Perez')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos que el Jinja en listar.html dibuje el botón secundario "Limpiar"
+    assert "Limpiar" in texto_html
+    # Verificamos que el input de búsqueda no se borre y conserve lo que el usuario escribió
+    assert 'value="perez"' in texto_html.lower()
