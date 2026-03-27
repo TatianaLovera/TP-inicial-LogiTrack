@@ -1253,3 +1253,79 @@ def test_detalle_acceso_operador_exitoso(client):
     assert respuesta.status_code == 200
     # En lugar de buscar el DNI (que quizás no está en tu HTML), buscamos el nombre
     assert nombre_dest in html
+
+# ==========================================
+# CASO 30: HOJA DE RUTA Y TRANSPORTISTA (US-34)
+# ==========================================
+
+def test_acceso_hoja_ruta_y_privacidad(client):
+    """Prueba AC1 y AC4: El transportista accede a su ruta sin ver DNIs"""
+    from app import envios
+    
+    # 1. Login como Transportista
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'}, follow_redirects=True)
+    
+    # 2. Entramos a la hoja de ruta
+    respuesta = client.get('/hoja-ruta', follow_redirects=True)
+    html = respuesta.data.decode('utf-8')
+    
+    assert respuesta.status_code == 200
+    
+    # 3. Verificamos Privacidad: Buscamos un DNI de un envío asignado a él
+    # Según tu carga de datos, el envío 0 está asignado al 'transportista'
+    envio_asignado = envios[0]
+    dni_cliente = envio_asignado['destinatario']['dni']
+    
+    # EL TEST QUE ROMPE: Si el DNI viaja al HTML del transportista, viola la Ley 25.326
+    assert dni_cliente not in html
+
+def test_transportista_no_ve_envios_ajenos(client):
+    """Prueba de Seguridad (AC1): Bloqueo al intentar ver un envío no asignado"""
+    from app import envios
+    
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'}, follow_redirects=True)
+    
+    # Buscamos un envío que NO esté asignado a él (el envío 1 tiene transportista: None)
+    envio_ajeno = envios[1] 
+    id_ajeno = envio_ajeno['tracking_id']
+    
+    # Intentamos forzar la entrada por URL directa
+    respuesta = client.get(f'/envios/{id_ajeno}', follow_redirects=True)
+    
+    # Tu app.py debería rebotarlo con este mensaje
+    assert "No tenés permisos para ver este envío" in respuesta.data.decode('utf-8')
+
+def test_transportista_botones_estado(client):
+    """Prueba AC5: Presencia de acciones rápidas para la entrega"""
+    from app import envios
+    
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'}, follow_redirects=True)
+    
+    # Entramos al detalle de SU envío en tránsito (envio 0)
+    envio_asignado = envios[0]
+    id_propio = envio_asignado['tracking_id']
+    
+    respuesta = client.get(f'/envios/{id_propio}', follow_redirects=True)
+    html = respuesta.data.decode('utf-8')
+    
+    assert respuesta.status_code == 200
+    # Verificamos que los estados permitidos estén en el HTML (seguramente en un <select> o botones)
+    assert "Entregado" in html
+    assert "Visita Fallida" in html
+
+def test_cierre_acceso_envio_entregado(client):
+    """Prueba AC7: Los envíos entregados desaparecen de la hoja de ruta activa"""
+    from app import envios
+    
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'}, follow_redirects=True)
+    
+    # En tu carga de datos (app.py), el envío 2 está asignado al transportista pero ya está "Entregado"
+    envio_entregado = envios[2]
+    id_entregado = envio_entregado['tracking_id']
+    
+    # Entramos a la hoja de ruta
+    respuesta = client.get('/hoja-ruta', follow_redirects=True)
+    html = respuesta.data.decode('utf-8')
+    
+    # El ID del envío entregado NO debe estar en la lista de trabajo actual
+    assert id_entregado not in html
