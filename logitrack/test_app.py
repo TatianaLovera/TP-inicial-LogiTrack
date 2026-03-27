@@ -1089,31 +1089,33 @@ def test_clases_css_variables_tema(client):
 from flask import url_for
 
 # ==========================================
-# CASO 29: EDICIÓN DE ENVÍOS - BLINDADO (US-26)
+# CASO 29: EDICIÓN DE ENVÍOS - FINAL (US-26)
 # ==========================================
 
-def test_acceso_edicion_solo_supervisor(client, app):
-    """Prueba AC1: Verifica acceso restringido usando la ruta real de la app"""
-    with app.test_request_context():
-        # Autodetectamos la URL que Flask generó para 'editar_envio'
+def test_acceso_edicion_solo_supervisor(client):
+    """Prueba AC1: Verifica acceso restringido detectando la ruta automáticamente"""
+    # Obtenemos la app desde el cliente para usar url_for
+    app_instancia = client.application
+    with app_instancia.test_request_context():
         url_real = url_for('editar_envio', tracking_id='LT-636C9254')
 
     # 1. Intentamos como Operador
     client.post('/login', data={'usuario': 'operador', 'password': 'ope123'}, follow_redirects=True)
     res_ope = client.get(url_real, follow_redirects=True)
     
-    # Verificamos que no acceda (o redirige o da error de permiso)
-    assert res_ope.status_code != 404 # Si da 404, es que la ruta está mal escrita en el test
+    # El operador no debe entrar al form de edición
     assert "Acceso restringido" in res_ope.data.decode('utf-8') or res_ope.status_code == 403
 
-def test_edicion_exitosa_datos_basicos(client, app):
-    """Prueba AC5: El Supervisor cambia datos en la ruta autodetectada"""
-    with app.test_request_context():
+def test_edicion_exitosa_datos_basicos(client):
+    """Prueba AC5: El Supervisor cambia datos en la ruta real del sistema"""
+    app_instancia = client.application
+    with app_instancia.test_request_context():
+        # Usamos un ID que esté "Ingresado" para que la lógica de negocio permita editar
         url_real = url_for('editar_envio', tracking_id='LT-06E4E1D1')
 
     client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
     
-    # Datos de prueba (asegúrate que estos nombres coincidan con los 'name' de tus <input>)
+    # Datos para actualizar
     datos_update = {
         "destinatario_nombre": "Cliente VIP Test",
         "destino": "Mendoza Centro",
@@ -1122,18 +1124,20 @@ def test_edicion_exitosa_datos_basicos(client, app):
     
     respuesta = client.post(url_real, data=datos_update, follow_redirects=True)
     
+    # Verificamos éxito
     assert respuesta.status_code == 200
     assert "actualizado" in respuesta.data.decode('utf-8').lower()
 
-def test_edicion_validacion_campos_vacios(client, app):
-    """Prueba AC4: Validación de nulidad en la ruta real"""
-    with app.test_request_context():
+def test_edicion_validacion_campos_vacios(client):
+    """Prueba AC4: Validación de nulidad en el formulario de edición"""
+    app_instancia = client.application
+    with app_instancia.test_request_context():
         url_real = url_for('editar_envio', tracking_id='LT-06E4E1D1')
 
     client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
     
-    # Intentamos vaciar un campo requerido
+    # Intentamos enviar el nombre vacío
     respuesta = client.post(url_real, data={"destinatario_nombre": ""}, follow_redirects=True)
     
-    # Si el sistema valida, no debería dar éxito
+    # Debería fallar la validación
     assert "obligatorio" in respuesta.data.decode('utf-8') or "error" in respuesta.data.decode('utf-8').lower()
