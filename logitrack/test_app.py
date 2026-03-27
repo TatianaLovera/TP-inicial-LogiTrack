@@ -1,5 +1,6 @@
 import pytest
 from app import app
+from flask import url_for, request
 
 # ==========================================
 # FIXTURE: CONFIGURACIÓN DEL ENTORNO DE TEST
