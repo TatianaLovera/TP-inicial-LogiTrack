@@ -901,3 +901,98 @@ def test_ordenamiento_indicador_visual(client):
     # Como en app.py le mandás sort_order a la vista listar.html, 
     # comprobamos que el Jinja esté armando los enlaces para cambiar de orden.
     assert 'order=asc' in texto_html or 'order=desc' in texto_html
+
+# ==========================================
+# CASO 24: PAGINACIÓN - ATÓMICOS (US-11)
+# ==========================================
+
+def test_paginacion_pagina_negativa_corrige_a_uno(client):
+    """Prueba EDGE CASE: Evitar que el sistema rompa si le mandan página negativa o cero"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Mandamos basura a la paginación (-5)
+    respuesta = client.get('/envios?page=-5')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El backend (app.py) usa `max(int(page), 1)`, así que debe corregirlo y mostrar la página 1
+    assert respuesta.status_code == 200
+    assert "Página 1" in texto_html
+
+def test_paginacion_pagina_excesiva_corrige_al_final(client):
+    """Prueba EDGE CASE: Evitar que el sistema rompa si piden una página que no existe"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Mandamos un número gigante a la paginación
+    respuesta = client.get('/envios?page=9999')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El backend hace `if page > total_pages: page = total_pages`.
+    # Como los datos semilla de app.py generan 13 paquetes (2 páginas), debe forzarnos a la página 2.
+    assert respuesta.status_code == 200
+    assert "Página 2" in texto_html
+
+def test_paginacion_recalculo_con_busqueda(client):
+    """Prueba AC5: La búsqueda recalcula dinámicamente el total de páginas"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Buscamos un texto muy específico que devuelva solo 1 resultado (ej: "Juan Pérez")
+    respuesta = client.get('/envios?q=juan')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Al haber 1 solo resultado, la paginación debe ajustarse matemáticamente
+    assert respuesta.status_code == 200
+    # No debería haber una "Página 2" disponible para hacer clic
+    assert "Página 2" not in texto_html
+
+def test_paginacion_parametros_invalidos_no_crashean(client):
+    """Prueba EDGE CASE: Un atacante manda letras en lugar de números a la página"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Forzamos un ValueError mandando un texto en el parámetro page
+    respuesta = client.get('/envios?page=letras_invalidas')
+    
+    # Si la app no tiene un bloque try/except para el casteo a int(), 
+    # flask tiraría un Error 500 (Internal Server Error). 
+    # Esta aserción fallará si tu app.py no ataja la conversión de letras a enteros.
+    assert respuesta.status_code == 200
+
+# ==========================================
+# CASO 25: ERRORES AMIGABLES - ATÓMICOS (US-12)
+# ==========================================
+
+def test_error_404_personalizado(client):
+    """Prueba AC4: Si el usuario inventa una ruta, ve una página de error amigable"""
+    # Intentamos entrar a una URL que no existe en app.py
+    respuesta = client.get('/esta-ruta-no-existe-nunca')
+    
+    # El status debe ser 404
+    assert respuesta.status_code == 404
+    
+    texto_html = respuesta.data.decode('utf-8')
+    # Verificamos que aparezca el mensaje amigable definido en tu historia
+    assert "Página no encontrada" in texto_html
+    # Verificamos que exista el botón para volver
+    assert "Volver" in texto_html or "inicio" in texto_html.lower()
+
+def test_detalle_envio_inexistente_no_explota(client):
+    """Prueba AC1: Buscar un tracking ID que no existe no debe romper el servidor"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # ID de tracking inventado
+    respuesta = client.get('/envios/TRK-999999', follow_redirects=True)
+    
+    # El servidor no debe tirar Error 500. Debe redirigir o mostrar error.
+    assert respuesta.status_code == 200
+    texto_html = respuesta.data.decode('utf-8')
+    assert "Envío no encontrado" in texto_html
+
+def test_error_login_credenciales_invalidas_visual(client):
+    """Prueba AC3: El error de credenciales se muestra con el estilo correcto (rojo/alerta)"""
+    respuesta = client.post('/login', data={'usuario': 'hacker', 'password': '123'}, follow_redirects=True)
+    
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos el mensaje
+    assert "Usuario o contraseña incorrectos" in texto_html
+    # Verificamos que use una clase de CSS de alerta (Bootstrap 'danger' o similar)
+    assert "danger" in texto_html or "alert" in texto_html or "error" in texto_html
