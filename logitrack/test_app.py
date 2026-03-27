@@ -483,3 +483,91 @@ def test_busqueda_muestra_boton_limpiar(client):
     assert "Limpiar" in texto_html
     # Verificamos que el input de búsqueda no se borre y conserve lo que el usuario escribió
     assert 'value="perez"' in texto_html.lower()
+
+# ==========================================
+# CASO 18: CAMBIO DE ESTADO - ATÓMICOS (US-05)
+# ==========================================
+
+def test_operador_cancela_envio_ingresado(client):
+    """Prueba AC6: El sistema permite al Operador cancelar un envío recién ingresado"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+    
+    # Buscamos dinámicamente un paquete "Ingresado"
+    from app import envios
+    envio = next(e for e in envios if e["estado"] == "Ingresado")
+    
+    respuesta = client.post(f'/envios/{envio["tracking_id"]}/cambiar-estado', 
+                            data={'nuevo_estado': 'Cancelado'}, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    assert "Estado actualizado a: Cancelado" in texto_html
+
+def test_supervisor_transicion_logica_invalida(client):
+    """Prueba EDGE CASE: Evitar saltos de estado mágicos (Ingresado -> Entregado)"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    from app import envios
+    # Buscamos uno "Ingresado"
+    envio = next(e for e in envios if e["estado"] == "Ingresado")
+    
+    # Intentamos saltarnos toda la cadena logística
+    respuesta = client.post(f'/envios/{envio["tracking_id"]}/cambiar-estado', 
+                            data={'nuevo_estado': 'Entregado'}, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Tu diccionario 'transitions' en app.py es brillante y debería frenar esto
+    assert "No tenés permisos para realizar ese cambio de estado" in texto_html
+
+def test_flujo_retorno_vuelve_remitente(client):
+    """Prueba AC11: Flujo válido de Visita Fallida a Vuelve a remitente"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    from app import envios
+    envio = next(e for e in envios if e["estado"] == "Visita Fallida")
+    
+    respuesta = client.post(f'/envios/{envio["tracking_id"]}/cambiar-estado', 
+                            data={'nuevo_estado': 'Vuelve a remitente'}, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    assert "Estado actualizado a: Vuelve a remitente" in texto_html
+
+def test_cambio_estado_registra_auditoria(client):
+    """Prueba AC7: El cambio de estado alimenta el Log de Auditoría interno"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    from app import envios, audit_logs
+    envio = next(e for e in envios if e["estado"] == "En sucursal")
+    logs_antes = len(audit_logs)
+    
+    # Hacemos el cambio enviando todos los datos
+    client.post(f'/envios/{envio["tracking_id"]}/cambiar-estado', 
+                data={'nuevo_estado': 'En tránsito', 'transportista': 'Juan Perez', 'nota': 'Sale a reparto'}, 
+                follow_redirects=True)
+    
+    # Verificamos silenciosamente la variable audit_logs de app.py
+    logs_despues = len(audit_logs)
+    assert logs_despues > logs_antes
+    
+    ultimo_log = audit_logs[-1]
+    assert ultimo_log["accion"] == "Cambio de estado"
+    assert "En sucursal → En tránsito" in ultimo_log["detalle"]
+    assert "Sale a reparto" in ultimo_log["detalle"]
+
+# ==========================================
+# TEST TDD PARA COMPLETAR EL CÓDIGO (AC10)
+# ==========================================
+def test_retiro_sucursal_requiere_dni(client):
+    """Prueba AC10 (NFR-02): Validar DNI al entregar en sucursal. 
+       ⚠️ ESTE TEST FALLARÁ hasta que modifiques app.py"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    from app import envios
+    envio = next(e for e in envios if e["estado"] == "En sucursal")
+    
+    # Intentamos entregar SIN enviar el DNI de quien retira
+    respuesta = client.post(f'/envios/{envio["tracking_id"]}/cambiar-estado', 
+                            data={'nuevo_estado': 'Entregado'}, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El test exige que tu sistema rechace el intento mostrando este mensaje
+    assert "Debe ingresar el DNI de quien retira" in texto_html
