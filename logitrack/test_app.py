@@ -1027,17 +1027,20 @@ def test_dashboard_conteo_dinamico_consistente(client):
     assert respuesta.status_code == 200
 
 def test_dashboard_acceso_restringido_operador(client):
-    """Prueba AC1: El operador no debería ver el panel de estadísticas (si es exclusivo)"""
-    client.post('/login', data={'usuario': 'operador', 'password': 'ope123'})
+    """Prueba AC1: El operador no debería ver el panel de estadísticas del supervisor"""
+    # 1. Nos logueamos como operador
+    client.post('/login', data={'usuario': 'operador', 'password': 'ope123'}, follow_redirects=True)
     
-    respuesta = client.get('/', follow_redirects=True)
+    # 2. Intentamos ir a la página principal de envíos (donde el operador trabaja)
+    respuesta = client.get('/envios', follow_redirects=True)
     texto_html = respuesta.data.decode('utf-8')
     
-    # Si el dashboard es exclusivo, el operador no debería ver la grilla de stats
-    # O al menos no debería tener acceso a las funciones de supervisión
+    # 3. Verificaciones lógicas:
     assert respuesta.status_code == 200
-    # Aquí validamos que el contenido sea el de su rol (Listado de envíos)
-    assert "Listado" in texto_html or "Mis Envíos" in texto_html
+    # El operador NO debería ver la grilla de estadísticas que es para el jefe
+    assert "stats-grid" not in texto_html
+    # Pero SÍ debería ver su tabla de trabajo (el tracking id de los paquetes)
+    assert "TRK" in texto_html or "Tracking" in texto_html
 
 def test_dashboard_manejo_ceros_visual(client):
     """Prueba AC5: La interfaz no se rompe si no hay datos"""
