@@ -279,3 +279,146 @@ def test_alta_envio_rol_no_autorizado(client):
     
     # 3. El decorador de Flask debería patearnos afuera
     assert "No tenés permisos para acceder a esta pantalla" in texto_html
+
+# ==========================================
+# CASO 15: LISTADO GENERAL DE ENVÍOS (US-02)
+# ==========================================
+
+def test_listado_envios_muestra_columnas_correctas(client):
+    """Prueba el CAMINO FELIZ: Que la tabla renderice los encabezados y datos clave"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    respuesta = client.get('/envios')
+    assert respuesta.status_code == 200
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos los Criterios de Aceptación (Columnas visibles)
+    assert "Tracking ID" in texto_html
+    assert "Remitente" in texto_html
+    assert "Destinatario" in texto_html
+    assert "Estado" in texto_html
+    
+    # Verificamos que al menos un paquete real se esté mostrando en pantalla
+    from app import envios
+    if envios: # Tomamos el tracking del paquete más reciente
+        tracking_reciente = envios[-1]['tracking_id']
+        assert tracking_reciente in texto_html
+
+def test_listado_envios_paginacion_dinamica(client):
+    """Prueba el CAMINO FELIZ: Que la paginación funcione sin romper la app"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Forzamos al sistema a ir a la página 2
+    respuesta = client.get('/envios?page=2')
+    assert respuesta.status_code == 200
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos que el control de paginación nos confirme que estamos en la pág 2
+    assert "Página 2" in texto_html
+
+def test_listado_envios_busqueda_sin_resultados(client):
+    """Prueba EDGE CASE (Romper todo): Búsqueda de un ID que no existe"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Le mandamos basura al buscador por la URL
+    respuesta = client.get('/envios?q=TRACKING-FALSO-999X')
+    assert respuesta.status_code == 200
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El sistema no debe crashear, sino mostrar el "Empty State" (estado vacío) amigable
+    assert "No se encontraron resultados para" in texto_html
+    assert "TRACKING-FALSO-999X" in texto_html
+
+def test_listado_envios_seguridad_transportista(client):
+    """Prueba SEGURIDAD: Un rol inferior no debe poder ver el listado general"""
+    # Nos logueamos como el chofer (Transportista)
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'})
+    
+    # Intenta entrar al listado general
+    respuesta = client.get('/envios', follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El sistema (gracias al decorador @role_required) debe bloquear el acceso
+    assert "No tenés permisos para acceder a esta pantalla" in texto_html
+
+# ==========================================
+# HELPERS PARA US-03
+# ==========================================
+def obtener_tracking_semilla():
+    """Obtiene un ID real de los datos de ejemplo cargados al iniciar la app"""
+    from app import envios
+    return envios[0]['tracking_id'] # Agarramos el primero ("Juan Pérez")
+
+# ==========================================
+# CASO 16: DETALLE DE ENVÍO - ATÓMICOS (US-03)
+# ==========================================
+
+def test_detalle_supervisor_ve_datos_personales(client):
+    """Prueba AC3: El Supervisor debe ver DNI, teléfono y dirección exacta"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    tracking = obtener_tracking_semilla()
+    
+    respuesta = client.get(f'/envios/{tracking}')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # En app.py el primer remitente semilla es "Juan Pérez", DNI "12345678"
+    assert "DNI: 12345678" in texto_html
+    assert "11-2345-6789" in texto_html # Teléfono
+
+def test_detalle_operador_no_ve_datos_personales(client):
+    """Prueba AC1 y AC2: Privacidad Ley 25.326. El Operador NO debe ver datos sensibles"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+    tracking = obtener_tracking_semilla()
+    
+    respuesta = client.get(f'/envios/{tracking}')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos que los datos logísticos sí estén...
+    assert tracking in texto_html
+    
+    # ...Pero que la info personal esté censurada por el HTML
+    assert "DNI: 12345678" not in texto_html
+    assert "11-2345-6789" not in texto_html
+
+def test_detalle_supervisor_genera_auditoria(client):
+    """Prueba AC4: Trazabilidad. Ver el detalle como Supervisor debe dejar registro"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    tracking = obtener_tracking_semilla()
+    
+    from app import audit_logs
+    cantidad_logs_antes = len(audit_logs)
+    
+    # El supervisor entra a ver el detalle
+    client.get(f'/envios/{tracking}')
+    
+    # Verificamos silenciosamente la lista de auditoría en memoria
+    cantidad_logs_despues = len(audit_logs)
+    assert cantidad_logs_despues > cantidad_logs_antes
+    assert audit_logs[-1]['accion'] == "Consulta"
+    assert audit_logs[-1]['tracking_id'] == tracking
+
+def test_detalle_historial_visible(client):
+    """Prueba AC5: La línea de tiempo de estados debe renderizarse"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+    tracking = obtener_tracking_semilla()
+    
+    respuesta = client.get(f'/envios/{tracking}')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos que la clase CSS del timeline que usás en detalle.html esté presente
+    assert "timeline-item" in texto_html
+    assert "Ingresado" in texto_html
+
+def test_detalle_transportista_espiando_paquete_ajeno(client):
+    """Prueba EDGE CASE: Un transportista intenta ver un paquete que no tiene asignado"""
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'})
+    
+    # Buscamos en app.py el paquete de "Ana Martínez" que está Entregado y NO es de este chofer hoy
+    from app import envios
+    envio_ajeno = next(e for e in envios if e["remitente"]["nombre"] == "Ana Martínez")
+    
+    respuesta = client.get(f'/envios/{envio_ajeno["tracking_id"]}', follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El sistema debe echarlo a la pantalla de hoja de ruta
+    assert "No tenés permisos para ver este envío" in texto_html
