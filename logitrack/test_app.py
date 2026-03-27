@@ -544,14 +544,16 @@ def test_cambio_estado_registra_auditoria(client):
                 data={'nuevo_estado': 'En tránsito', 'transportista': 'Juan Perez', 'nota': 'Sale a reparto'}, 
                 follow_redirects=True)
     
-    # Verificamos silenciosamente la variable audit_logs de app.py
-    logs_despues = len(audit_logs)
-    assert logs_despues > logs_antes
+    # Aislamos solo los logs que se agregaron en este último segundo
+    nuevos_logs = audit_logs[logs_antes:]
     
-    ultimo_log = audit_logs[-1]
-    assert ultimo_log["accion"] == "Cambio de estado"
-    assert "En sucursal → En tránsito" in ultimo_log["detalle"]
-    assert "Sale a reparto" in ultimo_log["detalle"]
+    # Buscamos el log específico de cambio de estado ignorando el de "Consulta"
+    log_cambio = next((log for log in nuevos_logs if log["accion"] == "Cambio de estado"), None)
+    
+    # Verificamos que efectivamente se haya creado
+    assert log_cambio is not None
+    assert "En sucursal → En tránsito" in log_cambio["detalle"]
+    assert "Sale a reparto" in log_cambio["detalle"]
 
 # ==========================================
 # TEST TDD PARA COMPLETAR EL CÓDIGO (AC10)
