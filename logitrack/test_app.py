@@ -573,3 +573,88 @@ def test_retiro_sucursal_requiere_dni(client):
     
     # El test exige que tu sistema rechace el intento mostrando este mensaje
     assert "Debe ingresar el DNI de quien retira" in texto_html
+
+# ==========================================
+# CASO 19: AUDITORÍA DE EDICIÓN - ATÓMICOS (US-06)
+# ==========================================
+
+def test_editar_envio_registra_auditoria_valores(client):
+    """Prueba AC1: Editar datos de cliente guarda el valor viejo y el nuevo en el log"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    from app import envios, audit_logs
+    # Tomamos el primer paquete que es editable (Juan Pérez)
+    envio = envios[0] 
+    tracking = envio["tracking_id"]
+    nombre_viejo = envio["remitente"]["nombre"]
+    nombre_nuevo = "Juan Editado Test"
+    
+    logs_antes = len(audit_logs)
+    
+    # Preparamos todos los datos requeridos para la edición, cambiando solo el nombre
+    datos_edicion = {
+        'remitente_nombre': nombre_nuevo,
+        'remitente_dni': envio['remitente']['dni'],
+        'remitente_direccion': envio['remitente']['direccion'],
+        'remitente_telefono': envio['remitente']['telefono'],
+        'remitente_email': envio['remitente']['email'],
+        'destinatario_nombre': envio['destinatario']['nombre'],
+        'destinatario_dni': envio['destinatario']['dni'],
+        'destinatario_direccion': envio['destinatario']['direccion'],
+        'destinatario_telefono': envio['destinatario']['telefono'],
+        'destinatario_email': envio['destinatario']['email'],
+        'origen': envio['origen'],
+        'destino': envio['destino'],
+        'peso': envio['peso'],
+        'dimensiones': envio['dimensiones'],
+        'descripcion': envio['descripcion']
+    }
+    
+    client.post(f'/envios/{tracking}/editar', data=datos_edicion, follow_redirects=True)
+    
+    # Verificamos que se haya generado el log de "Edición"
+    nuevos_logs = audit_logs[logs_antes:]
+    log_edicion = next((log for log in nuevos_logs if log["accion"] == "Edición"), None)
+    
+    assert log_edicion is not None
+    # Verificamos la regla de oro: Que quede guardado lo que era y lo que es ahora
+    assert nombre_viejo in log_edicion["detalle"]
+    assert nombre_nuevo in log_edicion["detalle"]
+    assert "→" in log_edicion["detalle"] # Símbolo que programaste en app.py
+
+def test_auditoria_pantalla_acceso_supervisor(client):
+    """Prueba AC3: El Supervisor puede acceder a la pantalla y ver la tabla"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    respuesta = client.get('/auditoria')
+    assert respuesta.status_code == 200
+    
+    texto_html = respuesta.data.decode('utf-8')
+    assert "Auditoría" in texto_html
+    assert "Acción" in texto_html
+    assert "Detalle" in texto_html
+
+def test_auditoria_pantalla_bloqueo_operador(client):
+    """Prueba EDGE CASE de Seguridad: El Operador tiene prohibido ver la bitácora"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+    
+    respuesta = client.get('/auditoria', follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El sistema debe echarlo
+    assert "No tenés permisos para acceder a esta pantalla" in texto_html
+
+def test_auditoria_inmutabilidad_bloqueo_metodos(client):
+    """Prueba AC2: Inmutabilidad. Nadie puede inyectar o borrar logs por la fuerza"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Un "hacker" intenta enviar una orden de BORRADO a la ruta de auditoría
+    respuesta_delete = client.delete('/auditoria')
+    
+    # Un "hacker" intenta INYECTAR un log falso enviando un formulario POST a la ruta
+    respuesta_post = client.post('/auditoria', data={'accion': 'Falsa'})
+    
+    # Flask es seguro por defecto: Al no haber habilitado methods=['POST', 'DELETE'] 
+    # en el @app.route de app.py, debe devolver HTTP 405 (Método no permitido)
+    assert respuesta_delete.status_code == 405
+    assert respuesta_post.status_code == 405
