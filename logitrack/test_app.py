@@ -325,9 +325,10 @@ def test_listado_envios_busqueda_sin_resultados(client):
     assert respuesta.status_code == 200
     texto_html = respuesta.data.decode('utf-8')
     
-    # El sistema no debe crashear, sino mostrar el "Empty State" (estado vacío) amigable
+    # El sistema no debe crashear, sino mostrar el "Empty State" amigable
     assert "No se encontraron resultados para" in texto_html
-    assert "TRACKING-FALSO-999X" in texto_html
+    # Como app.py usa .lower(), buscamos la cadena en minúsculas
+    assert "tracking-falso-999x" in texto_html
 
 def test_listado_envios_seguridad_transportista(client):
     """Prueba SEGURIDAD: Un rol inferior no debe poder ver el listado general"""
@@ -413,12 +414,12 @@ def test_detalle_transportista_espiando_paquete_ajeno(client):
     """Prueba EDGE CASE: Un transportista intenta ver un paquete que no tiene asignado"""
     client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'})
     
-    # Buscamos en app.py el paquete de "Ana Martínez" que está Entregado y NO es de este chofer hoy
+    # Buscamos el paquete de "Tech S.A.", que en app.py tiene transportista = None
     from app import envios
-    envio_ajeno = next(e for e in envios if e["remitente"]["nombre"] == "Ana Martínez")
+    envio_ajeno = next(e for e in envios if e["remitente"]["nombre"] == "Tech S.A.")
     
     respuesta = client.get(f'/envios/{envio_ajeno["tracking_id"]}', follow_redirects=True)
     texto_html = respuesta.data.decode('utf-8')
     
-    # El sistema debe echarlo a la pantalla de hoja de ruta
+    # Ahora sí, al no ser su paquete, el sistema debe echarlo
     assert "No tenés permisos para ver este envío" in texto_html
