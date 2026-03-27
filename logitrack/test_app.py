@@ -89,3 +89,118 @@ def test_error_404_ruta_inexistente(client):
     """Prueba el comportamiento del sistema ante una URL inventada"""
     respuesta = client.get('/ruta-que-no-existe')
     assert respuesta.status_code == 404
+
+# ==========================================
+# CASO 7: SEGURIDAD DE CREDENCIALES
+# ==========================================
+def test_login_fallido_credenciales_invalidas(client):
+    """Prueba que el sistema rechace contraseñas incorrectas y no inicie sesión"""
+    datos_login = {
+        'usuario': 'supervisor', 
+        'password': 'clave-inventada-123'
+    }
+    respuesta = client.post('/login', data=datos_login, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Debe volver a mostrar el login y la alerta de error
+    assert "Usuario o contraseña incorrectos" in texto_html
+    assert "Bienvenido" not in texto_html
+
+# ==========================================
+# CASO 8: DESTRUCCIÓN DE SESIÓN (US-27)
+# ==========================================
+def test_logout_destruye_sesion(client):
+    """Prueba que al hacer logout la sesión se limpie y las rutas se bloqueen"""
+    # 1. Iniciamos sesión
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+    
+    # 2. Hacemos logout
+    respuesta_logout = client.get('/logout', follow_redirects=True)
+    texto_logout = respuesta_logout.data.decode('utf-8')
+    assert "Sesión cerrada correctamente" in texto_logout
+    
+    # 3. Intentamos entrar a una ruta protegida
+    respuesta_restringida = client.get('/envios')
+    assert respuesta_restringida.status_code == 302 # Nos rebota al login
+
+# ==========================================
+# CASO 9: ROBUSTECIMIENTO DE FORMULARIOS (Task-17)
+# ==========================================
+def test_alta_envio_faltan_datos_obligatorios(client):
+    """Prueba que el sistema no guarde envíos con campos vacíos"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
+    
+    # Mandamos el formulario pero intencionalmente sin "peso" y sin "origen"
+    datos_incompletos = {
+        'remitente_nombre': 'Juan', 'remitente_dni': '111', 
+        'remitente_direccion': 'Dir 1', 'remitente_telefono': '123',
+        'destinatario_nombre': 'Maria', 'destinatario_dni': '222', 
+        'destinatario_direccion': 'Dir 2', 'destinatario_telefono': '321',
+        'acepta_ley': 'on'
+    }
+    
+    respuesta = client.post('/envios/nuevo', data=datos_incompletos, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El backend debe frenarlo
+    assert "Por favor completá todos los campos obligatorios" in texto_html
+
+# ==========================================
+# CASO 10: REGLAS DE NEGOCIO - LOGÍSTICA (US-05 / NFR-05)
+# ==========================================
+def test_supervisor_transito_sin_transportista(client):
+    """Prueba que no se pueda pasar a 'En tránsito' sin asignar un chofer"""
+    # Usamos la cuenta del supervisor
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Para la prueba, tomamos el primer paquete semilla generado por app.py
+    from app import envios
+    tracking_de_prueba = envios[0]['tracking_id']
+    
+    datos_estado = {
+        'nuevo_estado': 'En tránsito',
+        'transportista': '' # Dejamos el chofer vacío intencionalmente
+    }
+    
+    respuesta = client.post(f'/envios/{tracking_de_prueba}/cambiar-estado', data=datos_estado, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El sistema debe bloquear la transición logística
+    assert "Para pasar a &#39;En tránsito&#39; debés asignar un transportista" in texto_html
+
+# ==========================================
+# CASO 11: REGLAS DE NEGOCIO - ESTADOS FINALES (US-05)
+# ==========================================
+def test_modificar_estado_final_bloqueado(client):
+    """Prueba que un paquete 'Entregado' o 'Cancelado' sea inmutable"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Buscamos un envío que ya esté "Entregado" en los datos semilla de app.py
+    from app import envios
+    envio_entregado = next((e for e in envios if e["estado"] == "Entregado"), None)
+    
+    if envio_entregado:
+        datos_estado = {'nuevo_estado': 'En tránsito'}
+        respuesta = client.post(f'/envios/{envio_entregado["tracking_id"]}/cambiar-estado', data=datos_estado, follow_redirects=True)
+        texto_html = respuesta.data.decode('utf-8')
+        
+        # El sistema debe proteger la integridad del estado final
+        assert "Este envío está en un estado final y no puede ser modificado" in texto_html
+
+# ==========================================
+# CASO 12: HACKING DE ROLES (US-09)
+# ==========================================
+def test_operador_cambiando_a_entregado(client):
+    """Prueba de seguridad: Un operador intentando forzar un estado no permitido"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
+    
+    from app import envios
+    tracking_de_prueba = envios[0]['tracking_id']
+    
+    # El operador intenta mandar un POST directo saltándose la UI para poner "Entregado"
+    datos_estado = {'nuevo_estado': 'Entregado'}
+    respuesta = client.post(f'/envios/{tracking_de_prueba}/cambiar-estado', data=datos_estado, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El backend debe rechazar la operación (Solo puede pasar a Cancelado si está Ingresado)
+    assert "No tenés permisos para realizar ese cambio de estado" in texto_html
