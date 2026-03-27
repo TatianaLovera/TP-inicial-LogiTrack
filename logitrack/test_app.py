@@ -782,3 +782,61 @@ def test_transportista_bloqueado_auditoria(client):
     
     # El decorador @role_required debe atajarlo
     assert "No tenés permisos para acceder a esta pantalla" in texto_html
+
+
+# ==========================================
+# CASO 22: RESTRICCIONES DE ESTADO - ATÓMICOS (US-09)
+# ==========================================
+
+def test_transportista_cambia_estado_permitido(client):
+    """Prueba AC2 (Camino Feliz): El chofer puede marcar su paquete como Entregado"""
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'})
+    
+    # Buscamos en app.py un paquete "En tránsito" asignado a "transportista" (ej: Juan Pérez)
+    from app import envios
+    envio = next(e for e in envios if e["estado"] == "En tránsito" and e.get("transportista") == "transportista")
+    tracking = envio["tracking_id"]
+    
+    # El transportista manda el formulario para marcarlo entregado
+    respuesta = client.post(f'/envios/{tracking}/cambiar-estado', 
+                            data={'nuevo_estado': 'Entregado', 'nota': 'Entregado en mano'}, 
+                            follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El sistema debe procesarlo con éxito
+    assert "Estado actualizado a: Entregado" in texto_html
+
+def test_transportista_bloqueado_estado_invalido(client):
+    """Prueba AC2 (Hackeo): El chofer intenta pasar su paquete a 'Cancelado'"""
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'})
+    
+    # Buscamos en app.py otro paquete "En tránsito" asignado a "transportista" (ej: Nora Castro)
+    from app import envios
+    envio = next(e for e in envios if e["estado"] == "En tránsito" and e.get("transportista") == "transportista")
+    tracking = envio["tracking_id"]
+    
+    # El chofer intenta "hackear" el form mandando un estado que no le corresponde
+    respuesta = client.post(f'/envios/{tracking}/cambiar-estado', 
+                            data={'nuevo_estado': 'Cancelado'}, 
+                            follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El backend debe rechazar la operación por falta de permisos de rol para ese estado
+    assert "No tenés permisos para realizar ese cambio de estado" in texto_html
+
+def test_backend_rechaza_cambio_sin_sesion(client):
+    """Prueba AC4 (Seguridad Extrema): Intento de POST directo sin estar logueado"""
+    # NO INICIAMOS SESIÓN (Usuario anónimo)
+    
+    from app import envios
+    tracking = envios[0]["tracking_id"]
+    
+    # Le pegamos directo a la ruta que procesa los cambios en el backend
+    # Desactivamos el follow_redirects para ver qué hace el servidor
+    respuesta = client.post(f'/envios/{tracking}/cambiar-estado', 
+                            data={'nuevo_estado': 'Cancelado'}, 
+                            follow_redirects=False)
+    
+    # Flask debe interceptar (HTTP 302 Redirección) y mandarlo al login (/login)
+    assert respuesta.status_code == 302
+    assert '/login' in respuesta.location
