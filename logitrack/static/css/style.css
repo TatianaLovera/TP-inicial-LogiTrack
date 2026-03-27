@@ -958,3 +958,69 @@ body.sidebar-open .main-content {
 .disabled{pointer-events:none;opacity:.5}
 .checkbox-row{display:flex;gap:10px;align-items:flex-start}
 .checkbox-row input{margin-top:4px}
+
+
+/* ── ERROR PAGE STYLES (US-12) ── */
+.error-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: var(--bg);
+    padding: 2rem;
+}
+
+.error-wrapper {
+    width: 100%;
+    max-width: 500px;
+    animation: fadeIn .3s ease-out;
+}
+
+.error-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 3rem 2rem;
+    text-align: center;
+    box-shadow: var(--shadow);
+}
+
+.error-icon {
+    font-family: var(--font-mono);
+    font-size: 5rem;
+    font-weight: 600;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 1.5rem;
+    opacity: 0.8;
+    letter-spacing: -0.05em;
+}
+
+.error-card .page-title {
+    margin-bottom: 0.5rem;
+}
+
+.error-card .page-subtitle {
+    margin-bottom: 2rem;
+    max-width: 300px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.error-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.error-footer {
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
