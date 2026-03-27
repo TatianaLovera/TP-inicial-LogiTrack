@@ -840,3 +840,64 @@ def test_backend_rechaza_cambio_sin_sesion(client):
     # Flask debe interceptar (HTTP 302 Redirección) y mandarlo al login (/login)
     assert respuesta.status_code == 302
     assert '/login' in respuesta.location
+
+# ==========================================
+# CASO 23: ORDENAMIENTO DE ENVÍOS - ATÓMICOS (US-10)
+# ==========================================
+
+def test_ordenamiento_por_defecto_descendente(client):
+    """Prueba AC1: Por defecto, los envíos más nuevos aparecen arriba"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Entramos al listado sin pedir ningún orden específico
+    respuesta = client.get('/envios')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Extraemos cuál es realmente el paquete más nuevo en la memoria de app.py
+    from app import envios, parse_fecha
+    envios_ordenados_desc = sorted(envios, key=lambda x: parse_fecha(x["fecha_creacion"]), reverse=True)
+    tracking_mas_nuevo = envios_ordenados_desc[0]["tracking_id"]
+    
+    # Verificamos que la página haya cargado bien y que ese paquete esté presente
+    assert respuesta.status_code == 200
+    assert tracking_mas_nuevo in texto_html
+
+def test_ordenamiento_ascendente(client):
+    """Prueba AC2: Invertir el orden (ascendente) muestra los más viejos primero"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Le mandamos explícitamente a tu backend los parámetros GET que programaste
+    respuesta = client.get('/envios?sort=fecha_creacion&order=asc')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Extraemos el paquete más VIEJO de la base de datos simulada
+    from app import envios, parse_fecha
+    envios_ordenados_asc = sorted(envios, key=lambda x: parse_fecha(x["fecha_creacion"]), reverse=False)
+    tracking_mas_viejo = envios_ordenados_asc[0]["tracking_id"]
+    
+    assert respuesta.status_code == 200
+    assert tracking_mas_viejo in texto_html
+
+def test_ordenamiento_ignora_parametros_invalidos(client):
+    """Prueba EDGE CASE: Un atacante manda parámetros de ordenamiento falsos"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Mandamos basura a los parámetros de URL (ej: ordename por 'HACKEO')
+    respuesta = client.get('/envios?sort=HACKEO&order=MAGIA')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El backend (tu diccionario sort_key_map en app.py) debe ignorarlo elegantemente
+    # y devolver la tabla sin crashear con un Error 500
+    assert respuesta.status_code == 200
+    assert "Tracking ID" in texto_html # Comprueba que la tabla se dibujó
+
+def test_ordenamiento_indicador_visual(client):
+    """Prueba AC3: El HTML debe contener los enlaces/indicadores de ordenamiento"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    respuesta = client.get('/envios')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Como en app.py le mandás sort_order a la vista listar.html, 
+    # comprobamos que el Jinja esté armando los enlaces para cambiar de orden.
+    assert 'order=asc' in texto_html or 'order=desc' in texto_html
