@@ -1087,77 +1087,73 @@ def test_clases_css_variables_tema(client):
     # Según tu US, se sugieren variables CSS o data-theme
     assert "root" in contenido_css or "data-theme" in contenido_css or "--bg" in contenido_css
 
-from flask import url_for
-
 # ==========================================
-# CASO 28: EDICIÓN DE ENVÍOS - CALIBRADO (US-26)
+# CASO 28: EDICIÓN DE ENVÍOS - FINAL (US-26)
 # ==========================================
 
 def test_acceso_edicion_solo_supervisor(client):
-    """Prueba AC1: Verifica que el Operador sea redirigido al intentar editar"""
-    # 1. Login como Operador
+    """Prueba AC1: Verifica que el Operador sea redirigido por falta de permisos"""
+    # Login como Operador (password 'op123' según tu app.py)
     client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
     
-    # 2. Intentamos ir a la edición de cualquier envío (usamos el primero de la lista)
     with client.application.test_request_context():
-        # Obtenemos el primer envío real de tu lista 'envios'
+        # Usamos el primer envío de la semilla
         id_test = client.application.envios[0]['tracking_id']
         url_edit = url_for('editar_envio', tracking_id=id_test)
+        url_lista = url_for('listar_envios')
 
     respuesta = client.get(url_edit, follow_redirects=True)
     
-    # El decorador @role_required redirige y manda un flash
+    # El decorador @role_required redirige al home del usuario con un flash
     assert "No tenés permisos" in respuesta.data.decode('utf-8')
-    # Verificamos que volvió a la lista de envíos y no se quedó en editar
-    assert request.path == url_for('listar_envios')
+    assert request.path == url_lista
 
 def test_edicion_exitosa_supervisor(client):
-    """Prueba AC3 y AC5: Supervisor edita y los cambios impactan en el detalle"""
-    # 1. Login como Supervisor
+    """Prueba AC3 y AC5: Supervisor edita campos y el sistema impacta los cambios"""
     client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
     
     with client.application.test_request_context():
-        # Buscamos un envío que sea editable (menos de 5 días de antigüedad)
-        # Tu función 'cargar_datos_ejemplo' crea varios nuevos.
+        # Tomamos el primer envío (nuevo y editable)
         envio = client.application.envios[0]
         id_test = envio['tracking_id']
         url_edit = url_for('editar_envio', tracking_id=id_test)
 
-    # 2. Enviamos el formulario con TODOS los campos que pide tu app.py
-    # Nota: Tu app.py valida que no falte ninguno de estos en el 'all([])'
+    # Enviamos la estructura completa que espera tu app.py
     datos = {
         "remitente_nombre": "Juan Editado",
         "remitente_dni": envio['remitente']['dni'],
         "remitente_direccion": envio['remitente']['direccion'],
         "remitente_telefono": envio['remitente']['telefono'],
+        "remitente_email": envio['remitente'].get('email', ''),
         "destinatario_nombre": "Maria Editada",
         "destinatario_dni": envio['destinatario']['dni'],
         "destinatario_direccion": envio['destinatario']['direccion'],
         "destinatario_telefono": envio['destinatario']['telefono'],
-        "origen": "Origen Test",
-        "destino": "Destino Test",
-        "peso": "10",
-        "dimensiones": "1x1x1"
+        "destinatario_email": envio['destinatario'].get('email', ''),
+        "origen": "Origen Editado",
+        "destino": "Destino Editado",
+        "peso": "15",
+        "dimensiones": "20x20x20"
     }
     
     respuesta = client.post(url_edit, data=datos, follow_redirects=True)
     
-    # 3. Verificamos que redirigió al detalle y muestra el mensaje de éxito
-    assert "Envío actualizado correctamente" in respuesta.data.decode('utf-8')
-    assert "Juan Editado" in respuesta.data.decode('utf-8')
-    assert "Maria Editada" in respuesta.data.decode('utf-8')
+    # Verificamos mensaje de éxito y persistencia en el HTML
+    contenido = respuesta.data.decode('utf-8')
+    assert "actualizado correctamente" in contenido.lower()
+    assert "Juan Editado" in contenido
+    assert "Maria Editada" in contenido
 
 def test_edicion_bloqueada_por_tiempo(client):
-    """Prueba AC2: Verifica que no se puede editar si pasaron más de 5 días"""
+    """Prueba AC2: Verifica bloqueo de edición después de 5 días"""
     client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
     
     with client.application.test_request_context():
-        # El último envío de tu 'cargar_datos_ejemplo' tiene i=11 días de antigüedad
-        # (ahora - 6 días en el loop). i=6 ya bloquea.
+        # El envío 6 en tu carga de ejemplo tiene más de 5 días de antigüedad
         envio_viejo = client.application.envios[6] 
         url_edit = url_for('editar_envio', tracking_id=envio_viejo['tracking_id'])
 
     respuesta = client.get(url_edit, follow_redirects=True)
     
-    # Tu función 'puede_editar_envio' debería retornar False y disparar este flash:
+    # Verificamos el mensaje de tu función puede_editar_envio
     assert "Solo se puede editar un envío durante los primeros 5 días" in respuesta.data.decode('utf-8')
