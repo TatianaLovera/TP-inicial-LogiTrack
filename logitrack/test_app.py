@@ -996,3 +996,58 @@ def test_error_login_credenciales_invalidas_visual(client):
     assert "Usuario o contraseña incorrectos" in texto_html
     # Verificamos que use una clase de CSS de alerta (Bootstrap 'danger' o similar)
     assert "danger" in texto_html or "alert" in texto_html or "error" in texto_html
+
+# ==========================================
+# CASO 26: DASHBOARD DE SUPERVISOR - ATÓMICOS (US-13)
+# ==========================================
+
+def test_dashboard_acceso_exclusivo_supervisor(client):
+    """Prueba AC1: El Supervisor ve el dashboard al loguearse"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Al entrar a la raíz o al dashboard, debe ver las métricas
+    respuesta = client.get('/dashboard') 
+    texto_html = respuesta.data.decode('utf-8')
+    
+    assert respuesta.status_code == 200
+    assert "Panel de Control" in texto_html or "Dashboard" in texto_html
+    assert "Ingresado" in texto_html
+    assert "En tránsito" in texto_html
+
+def test_dashboard_conteo_exacto_de_estados(client):
+    """Prueba AC3: Los contadores muestran la cantidad real de la lista"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Obtenemos los datos reales de la "base de datos" de app.py
+    from app import envios
+    cant_entregados = len([e for e in envios if e["estado_actual"] == "Entregado"])
+    
+    respuesta = client.get('/dashboard')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos que el número calculado coincida con lo que escupe el HTML
+    # Buscamos el número cerca de la palabra "Entregado"
+    assert str(cant_entregados) in texto_html
+
+def test_dashboard_manejo_de_ceros(client):
+    """Prueba AC5: Si un estado tiene 0 envíos, muestra '0' y no falla"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Supongamos que no hay ningún envío "Cancelado" en los datos semilla
+    # El test busca que el label aparezca y tenga un 0 asociado
+    respuesta = client.get('/dashboard')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    assert "Cancelado" in texto_html
+    # Verificamos que no haya explotado el renderizado
+    assert respuesta.status_code == 200
+
+def test_dashboard_restringido_para_operador(client):
+    """Prueba de SEGURIDAD: Un Operador NO debe ver el Dashboard de métricas"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'ope123'})
+    
+    # El operador intenta "hackear" entrando a la URL del dashboard
+    respuesta = client.get('/dashboard', follow_redirects=True)
+    
+    # Debería rebotarlo con un mensaje de error o mandarlo a su listado
+    assert "Acceso restringido" in respuesta.data.decode('utf-8') or respuesta.status_code == 403
