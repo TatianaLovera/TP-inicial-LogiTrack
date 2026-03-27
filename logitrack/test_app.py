@@ -1208,3 +1208,57 @@ def test_responsive_tablas_legibles(client):
     # Verificamos que la tabla efectivamente esté adentro de este contenedor
     assert 'table-wrapper' in html
     assert '<table' in html
+
+
+# ==========================================
+# CASO 29: ENMASCARAMIENTO DE DATOS (US-30)
+# ==========================================
+
+def test_listado_oculta_datos_sensibles_operador(client):
+    """Prueba AC1 y AC3: El listado general NO debe mostrar DNIs ni Teléfonos completos"""
+    from app import envios
+    
+    # 1. Login como Operador
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
+    
+    # 2. Tomamos un envío real de la base de datos para saber qué buscar
+    envio_test = envios[0]
+    dni_real_dest = envio_test['destinatario']['dni']
+    tel_real_dest = envio_test['destinatario']['telefono']
+    
+    # 3. Entramos al listado general
+    respuesta = client.get('/envios', follow_redirects=True)
+    html = respuesta.data.decode('utf-8')
+    
+    assert respuesta.status_code == 200
+    
+    # EL TEST QUE ROMPE: Si el DNI completo o el Teléfono aparecen en el HTML, 
+    # significa que la tabla no está enmascarando los datos y viola la US-30.
+    assert dni_real_dest not in html
+    assert tel_real_dest not in html
+    
+    # Verificamos que se esté aplicando algún caracter de máscara visual (X o asteriscos)
+    assert "XXX" in html or "***" in html or "•••" in html
+
+def test_detalle_muestra_datos_completos_operador(client):
+    """Prueba AC2: En la vista de detalle, el Operador SÍ ve el dato completo para poder trabajar"""
+    from app import envios
+    
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
+    
+    # Tomamos el mismo envío
+    envio_test = envios[0]
+    id_test = envio_test['tracking_id']
+    dni_real_dest = envio_test['destinatario']['dni']
+    tel_real_dest = envio_test['destinatario']['telefono']
+    
+    # Entramos a la página de detalle individual
+    respuesta = client.get(f'/envios/{id_test}', follow_redirects=True)
+    html = respuesta.data.decode('utf-8')
+    
+    assert respuesta.status_code == 200
+    
+    # EL CAMINO FELIZ: Acá adentro, a puertas cerradas, el Operador DEBE ver el dato real
+    # para poder llamar al cliente o verificar su identidad en la sucursal.
+    assert dni_real_dest in html
+    assert tel_real_dest in html
