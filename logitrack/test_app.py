@@ -1001,7 +1001,7 @@ def test_error_login_credenciales_invalidas_visual(client):
     
 
 # ==========================================
-# CASO 26: DASHBOARD DE SUPERVISOR (US-13)
+# CASO 25: DASHBOARD DE SUPERVISOR (US-13)
 # ==========================================
 
 def test_dashboard_acceso_exclusivo_supervisor(client):
@@ -1052,7 +1052,7 @@ def test_dashboard_manejo_de_ceros(client):
     assert "stat-number" in respuesta.data.decode('utf-8')
 
 # ==========================================
-# CASO 27: MODO CLARO/OSCURO - ADAPTADO (US-14)
+# CASO 26: MODO CLARO/OSCURO - ADAPTADO (US-14)
 # ==========================================
 
 def test_presencia_control_tema(client):
@@ -1090,7 +1090,7 @@ def test_clases_css_variables_tema(client):
 from flask import url_for, request
 
 # ==========================================
-# CASO 28: EDICIÓN DE ENVÍOS - 100% BLINDADO (US-26)
+# CASO 27: EDICIÓN DE ENVÍOS - 100% BLINDADO (US-26)
 # ==========================================
 
 def test_acceso_edicion_solo_supervisor(client):
@@ -1164,3 +1164,47 @@ def test_edicion_bloqueada_por_tiempo(client):
     
     # Comprobamos que el sistema no lo dejó editar
     assert "Solo se puede editar un envío durante los primeros 5 días" in respuesta.data.decode('utf-8')
+
+# ==========================================
+# CASO 28: DISEÑO RESPONSIVE Y UX (US-29)
+# ==========================================
+
+def test_responsive_meta_viewport(client):
+    """Prueba AC1 y AC4: El pilar del diseño móvil (Etiqueta Viewport)"""
+    # Verificamos la página de login, que es lo primero que ve un usuario en móvil
+    respuesta = client.get('/login')
+    html = respuesta.data.decode('utf-8')
+    
+    # Si esta etiqueta falta, los celulares muestran la web como si fuera de PC (miniaturizada)
+    assert 'name="viewport"' in html
+    assert 'width=device-width' in html
+    assert 'initial-scale=1.0' in html
+
+def test_responsive_menu_hamburguesa(client):
+    """Prueba AC2: Presencia del menú adaptable para pantallas pequeñas"""
+    # Logueamos al operador para ver la estructura base
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
+    
+    # Entramos a su listado
+    respuesta = client.get('/envios', follow_redirects=True)
+    html = respuesta.data.decode('utf-8')
+    
+    # Verificamos que exista el botón del menú hamburguesa que definiste en tu base.html
+    assert 'id="sidebar-toggle"' in html
+    assert 'btn-sidebar-toggle' in html
+    # Buscamos el ícono del menú (las 3 rayitas)
+    assert '☰' in html
+
+def test_responsive_tablas_legibles(client):
+    """Prueba AC3: Las tablas deben estar envueltas para permitir scroll horizontal en móviles"""
+    # Logueamos al supervisor para ver el panel que tiene tablas
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Entramos al panel
+    respuesta = client.get('/panel', follow_redirects=True)
+    html = respuesta.data.decode('utf-8')
+    
+    # En tu CSS, .table-wrapper tiene 'overflow-x: auto;', lo que salva a las tablas en móviles
+    # Verificamos que la tabla efectivamente esté adentro de este contenedor
+    assert 'table-wrapper' in html
+    assert '<table' in html
