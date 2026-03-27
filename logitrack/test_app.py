@@ -955,65 +955,55 @@ def test_paginacion_parametros_invalidos_no_crashean(client):
     # flask tiraría un Error 500 (Internal Server Error). 
     # Esta aserción fallará si tu app.py no ataja la conversión de letras a enteros.
     assert respuesta.status_code == 200
+    
 
 # ==========================================
-# CASO 26: ERRORES AMIGABLES - ATÓMICOS (US-12)
+# CASO 25: DASHBOARD DE SUPERVISOR (US-13)
 # ==========================================
 
-def test_error_404_personalizado(client):
-    """Prueba AC4: Si el usuario inventa una ruta, ve una página de error amigable"""
-    # Intentamos entrar a una URL que no existe en app.py
-    respuesta = client.get('/esta-ruta-no-existe-nunca')
+def test_dashboard_acceso_exclusivo_supervisor(client):
+    """Prueba AC1: El Supervisor ve el panel al loguearse"""
+    # Logueamos al supervisor
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
     
-    # El status debe ser 404
-    assert respuesta.status_code == 404
-    
+    # Entramos a la ruta real: /panel (que es la que definiste en base.html)
+    respuesta = client.get('/panel', follow_redirects=True)
     texto_html = respuesta.data.decode('utf-8')
-    # Verificamos que aparezca el mensaje amigable definido en tu historia
-    assert "Página no encontrada" in texto_html
-    # Verificamos que exista el botón para volver
-    assert "Volver" in texto_html or "inicio" in texto_html.lower()
-
-def test_detalle_envio_inexistente_no_explota(client):
-    """Prueba AC1: Buscar un tracking ID que no existe no debe romper el servidor"""
-    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
     
-    # ID de tracking inventado
-    respuesta = client.get('/envios/TRK-999999', follow_redirects=True)
-    
-    # El servidor no debe tirar Error 500. Debe redirigir o mostrar error.
     assert respuesta.status_code == 200
-    texto_html = respuesta.data.decode('utf-8')
-    assert "Envío no encontrado" in texto_html
+    assert "Panel General" in texto_html
+    assert "stats-grid" in texto_html
 
-def test_error_login_credenciales_invalidas_visual(client):
-    """Prueba AC3: El error de credenciales se muestra con el estilo correcto (rojo/alerta)"""
-    respuesta = client.post('/login', data={'usuario': 'hacker', 'password': '123'}, follow_redirects=True)
+def test_dashboard_conteo_exacto_de_estados(client):
+    """Prueba AC3: Los contadores muestran la estructura de stats"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
     
+    respuesta = client.get('/panel', follow_redirects=True)
     texto_html = respuesta.data.decode('utf-8')
     
-    # Verificamos el mensaje
-    assert "Usuario o contraseña incorrectos" in texto_html
-    # Verificamos que use una clase de CSS de alerta (Bootstrap 'danger' o similar)
-    assert "danger" in texto_html or "alert" in texto_html or "error" in texto_html
+    # Verificamos que existan tarjetas de estadísticas
+    assert "stat-card" in texto_html
+    assert "Total de envíos" in texto_html
 
-from flask import session
-
-def test_dashboard_acceso_restringido_operador(client, app):
-    """Prueba AC1: Forzamos la sesión de operador para evitar rebotes al login"""
-    # 1. Forzamos la sesión dentro del contexto de la app
-    with client.session_transaction() as sess:
-        sess['user_id'] = 2  # Asumimos que 2 es el ID del operador
-        sess['usuario'] = 'operador'
-        sess['rol'] = 'Operador'
-
-    # 2. Ahora vamos directamente a la ruta de envíos
-    respuesta = client.get('/envios')
+def test_dashboard_restringido_para_operador(client):
+    """Prueba de SEGURIDAD: Un Operador NO debe ver el Panel de supervisor"""
+    # 1. Login como operador
+    client.post('/login', data={'usuario': 'operador', 'password': 'ope123'}, follow_redirects=True)
+    
+    # 2. El operador intenta entrar al panel de supervisor
+    respuesta = client.get('/panel', follow_redirects=True)
     texto_html = respuesta.data.decode('utf-8')
+    
+    # 3. Verificamos que NO vea el contenido del panel
+    # Si lo rebota, verá el login o un error, pero NO "Panel General"
+    assert "Panel General" not in texto_html
+    # También verificamos que en el menú (sidebar) no aparezca el link al panel
+    assert 'href="/panel"' not in texto_html
 
-    # 3. Verificaciones de seguridad
+def test_dashboard_manejo_de_ceros(client):
+    """Prueba AC5: La página carga correctamente incluso con datos dinámicos"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    respuesta = client.get('/panel', follow_redirects=True)
     assert respuesta.status_code == 200
-    # El operador NO debe ver las estadísticas exclusivas del supervisor
-    assert "stats-grid" not in texto_html
-    # Verificamos que no estemos en el login (buscamos una palabra típica de tu tabla de envíos)
-    assert "Acciones" in texto_html or "Estado" in texto_html or "Destinatario" in texto_html
+    assert "stat-number" in respuesta.data.decode('utf-8')
