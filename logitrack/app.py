@@ -410,6 +410,10 @@ def cambiar_estado(tracking_id):
     nuevo_estado = request.form.get("nuevo_estado", "").strip()
     nota = request.form.get("nota", "").strip() or "Sin nota adicional."
     transportista = request.form.get("transportista", "").strip() or None
+    
+    # 1. Agregamos la captura del DNI desde el formulario (si existe)
+    dni_retiro = request.form.get("dni_retiro", "").strip() 
+    
     usuario, rol = get_usuario()
 
     # Check if current state is final
@@ -446,6 +450,15 @@ def cambiar_estado(tracking_id):
     if nuevo_estado == "En tránsito" and rol == "Supervisor" and not transportista:
         flash("Para pasar a 'En tránsito' debés asignar un transportista.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+
+    # 2. INICIO DE LA NUEVA VALIDACIÓN LOGÍSTICA (AC10)
+    if estado_actual == "En sucursal" and nuevo_estado == "Entregado" and not dni_retiro:
+        flash("Debe ingresar el DNI de quien retira.", "error")
+        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+    
+    if dni_retiro:
+        nota = f"Retirado por DNI: {dni_retiro} - {nota}"
+    # FIN DE LA NUEVA VALIDACIÓN
 
     if transportista:
         envio["transportista"] = transportista
