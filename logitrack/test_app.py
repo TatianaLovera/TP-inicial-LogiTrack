@@ -1049,3 +1049,49 @@ def test_dashboard_manejo_de_ceros(client):
     respuesta = client.get('/panel', follow_redirects=True)
     assert respuesta.status_code == 200
     assert "stat-number" in respuesta.data.decode('utf-8')
+
+# ==========================================
+# CASO 27: MODO CLARO/OSCURO - FRONTEND (US-14)
+# ==========================================
+
+def test_presencia_control_tema(client):
+    """Prueba AC1: El botón de alternar tema debe estar visible al estar logueado"""
+    # El botón está dentro del bloque 'if session.usuario'
+    client.post('/login', data={'usuario': 'operador', 'password': 'ope123'}, follow_redirects=True)
+    
+    respuesta = client.get('/envios')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos que el ID que usa el JS para el toggle exista
+    assert 'id="theme-toggle"' in texto_html
+    assert 'btn-theme-toggle' in texto_html
+
+def test_vinculacion_javascript_tema(client):
+    """Prueba AC2/AC3: Verifica que el script que maneja el tema esté cargado"""
+    respuesta = client.get('/login') # El login suele cargar el base.html o sus estilos
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos que se esté llamando al archivo JS que debería contener la lógica de LocalStorage
+    assert 'src="' in texto_html and 'main.js' in texto_html
+
+def test_clases_css_modo_oscuro_existentes(client):
+    """Prueba de Integridad: Verifica que el CSS tenga definidos los colores de modo oscuro"""
+    # Intentamos obtener el archivo CSS directamente
+    respuesta = client.get('/static/css/style.css')
+    contenido_css = respuesta.data.decode('utf-8')
+    
+    # Buscamos si existen variables de CSS para el tema o el selector de data-theme
+    # Esto asegura que el "Camino Feliz" de visualización tenga respaldo en el CSS
+    assert "data-theme" in contenido_css or "--bg" in contenido_css
+    assert respuesta.status_code == 200
+
+def test_accesibilidad_contraste_basico(client):
+    """Prueba AC5: Verifica que el body no tenga estilos inline que rompan el tema"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    respuesta = client.get('/panel')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Un error común es "romper" el modo oscuro con style="background: white" hardcodeado
+    # Verificamos que el body esté limpio para que las clases CSS actúen
+    assert '<body style="background: white"' not in texto_html
+    assert '<body style="color: black"' not in texto_html
