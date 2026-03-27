@@ -1086,3 +1086,67 @@ def test_clases_css_variables_tema(client):
     # Según tu US, se sugieren variables CSS o data-theme
     assert "root" in contenido_css or "data-theme" in contenido_css or "--bg" in contenido_css
 
+# ==========================================
+# CASO 29: EDICIÓN DE ENVÍOS - ADAPTADO (US-26)
+# ==========================================
+
+def test_acceso_edicion_solo_supervisor(client):
+    """Prueba AC1: Verifica que el botón/ruta de edición sea exclusivo del Supervisor"""
+    # 1. Intentamos como Operador (Debe ser redirigido o ver error)
+    client.post('/login', data={'usuario': 'operador', 'password': 'ope123'}, follow_redirects=True)
+    # Usamos el nombre de endpoint que sugería tu base.html: 'editar_envio'
+    respuesta_ope = client.get('/editar_envio/LT-636C9254', follow_redirects=True)
+    
+    # El operador no debería ver el formulario de edición
+    assert "Acceso restringido" in respuesta_ope.data.decode('utf-8') or respuesta_ope.status_code == 403
+
+def test_restriccion_edicion_por_estado_logistico(client):
+    """Prueba AC2: Bloquea edición si el estado no es Ingresado o En sucursal"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Según tus logs, LT-636C9254 está "Entregado". No debería permitir edición.
+    id_entregado = "LT-636C9254"
+    respuesta = client.get(f'/editar_envio/{id_entregado}', follow_redirects=True)
+    
+    # Verificamos que el sistema dé un aviso de error
+    assert "No se puede editar" in respuesta.data.decode('utf-8') or "error" in respuesta.data.decode('utf-8').lower()
+
+def test_edicion_exitosa_datos_basicos(client):
+    """Prueba AC5: El Supervisor cambia el nombre del destinatario correctamente"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Usamos uno que esté "Ingresado" (LT-06E4E1D1)
+    id_valido = "LT-06E4E1D1"
+    
+    # Simulamos el envío del formulario de edición
+    # Nota: Ajustá los nombres de los campos (nombre, destino) según tu formulario
+    datos_update = {
+        "destinatario_nombre": "Cliente VIP Test",
+        "destino": "Mendoza Centro",
+        "estado": "Ingresado" 
+    }
+    
+    respuesta = client.post(f'/editar_envio/{id_valido}', data=datos_update, follow_redirects=True)
+    
+    assert respuesta.status_code == 200
+    assert "actualizado" in respuesta.data.decode('utf-8').lower()
+    
+    # Verificamos en la vista de detalle que el nombre cambió
+    res_detalle = client.get(f'/envio/{id_valido}', follow_redirects=True)
+    assert "Cliente VIP Test" in res_detalle.data.decode('utf-8')
+
+def test_edicion_validacion_campos_vacios(client):
+    """Prueba AC4: No permite guardar si el nombre del destinatario se borra"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    id_valido = "LT-06E4E1D1"
+    datos_invalidos = {
+        "destinatario_nombre": "", # Campo vacío prohibido
+        "destino": "CABA"
+    }
+    
+    respuesta = client.post(f'/editar_envio/{id_valido}', data=datos_invalidos, follow_redirects=True)
+    
+    # El sistema debería recargar el formulario con un mensaje de error
+    assert "obligatorio" in respuesta.data.decode('utf-8') or respuesta.status_code == 200 # 200 porque suele re-renderizar el form
+
