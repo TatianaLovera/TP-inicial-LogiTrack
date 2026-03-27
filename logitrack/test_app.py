@@ -658,3 +658,75 @@ def test_auditoria_inmutabilidad_bloqueo_metodos(client):
     # en el @app.route de app.py, debe devolver HTTP 405 (Método no permitido)
     assert respuesta_delete.status_code == 405
     assert respuesta_post.status_code == 405
+
+# ==========================================
+# CASO 19: HISTORIAL VISIBLE - ATÓMICOS (US-07)
+# ==========================================
+
+def test_historial_estado_inicial_tras_alta(client):
+    """Prueba AC4: Un envío recién creado muestra inmediatamente su evento original de creación"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+    
+    # Preparamos datos mínimos obligatorios para crear un envío rápido
+    datos_minimos = {
+        'remitente_nombre': 'A', 'remitente_dni': '1', 'remitente_direccion': 'A', 'remitente_telefono': '1', 'remitente_email': 'a@a.com',
+        'destinatario_nombre': 'B', 'destinatario_dni': '2', 'destinatario_direccion': 'B', 'destinatario_telefono': '2', 'destinatario_email': 'b@b.com',
+        'origen': 'C', 'destino': 'D', 'peso': '1', 'dimensiones': '1x1', 'acepta_ley': 'on'
+    }
+    client.post('/envios/nuevo', data=datos_minimos, follow_redirects=True)
+    
+    # Vamos al detalle del último envío creado
+    from app import envios
+    ultimo_tracking = envios[-1]["tracking_id"]
+    
+    respuesta = client.get(f'/envios/{ultimo_tracking}')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos que la nota dura que pusiste en app.py aparezca en el HTML
+    assert "Envío creado en el sistema" in texto_html
+    assert "Ingresado" in texto_html
+
+def test_historial_muestra_datos_completos_evento(client):
+    """Prueba AC2: El historial renderiza fecha, estado y notas del Mock API"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # Tomamos un paquete semilla de app.py que ya tenga historial avanzado (más de 1 evento)
+    from app import envios
+    envio_avanzado = next(e for e in envios if len(e["historial"]) > 1)
+    tracking = envio_avanzado["tracking_id"]
+    
+    # Agarramos el último evento de la lista de ese paquete
+    ultimo_evento = envio_avanzado["historial"][-1]
+    
+    respuesta = client.get(f'/envios/{tracking}')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Comprobamos que los datos exactos del diccionario se hayan inyectado en el HTML
+    assert ultimo_evento["estado"] in texto_html
+    assert ultimo_evento["fecha"] in texto_html
+    assert ultimo_evento["nota"] in texto_html
+
+def test_historial_agrega_nuevo_evento_dinamicamente(client):
+    """Prueba EDGE CASE / AC3: Cambiar el estado suma un nodo visual sin borrar los viejos"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    from app import envios
+    envio = next(e for e in envios if e["estado"] == "Ingresado")
+    tracking = envio["tracking_id"]
+    
+    # Hacemos un cambio de estado inyectando una nota de prueba MUY específica
+    nota_unica = "NOTA_TEST_HISTORIAL_999"
+    client.post(f'/envios/{tracking}/cambiar-estado', 
+                data={'nuevo_estado': 'Cancelado', 'nota': nota_unica}, 
+                follow_redirects=True)
+    
+    # Entramos a ver el detalle
+    respuesta = client.get(f'/envios/{tracking}')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # 1. Verificamos que el evento original (Ingresado) siga existiendo
+    assert "Envío creado en el sistema" in texto_html
+    
+    # 2. Verificamos que el nuevo evento se haya sumado a la pantalla
+    assert nota_unica in texto_html
+    assert "Cancelado" in texto_html
