@@ -205,3 +205,77 @@ def test_operador_cambiando_a_entregado(client):
     
     # El backend debe rechazar la operación (Solo puede pasar a Cancelado si está Ingresado)
     assert "No tenés permisos para realizar ese cambio de estado" in texto_html
+
+# ==========================================
+# HELPERS (Funciones de apoyo para los tests)
+# ==========================================
+def obtener_datos_envio_perfecto():
+    """Devuelve un diccionario con datos válidos para reutilizar en los tests de Alta"""
+    return {
+        'remitente_nombre': 'Carlos Test', 'remitente_dni': '12345678', 
+        'remitente_direccion': 'Calle Falsa 123', 'remitente_telefono': '11223344', 'remitente_email': 'c@c.com',
+        'destinatario_nombre': 'Ana Test', 'destinatario_dni': '87654321', 
+        'destinatario_direccion': 'Av Siempre 742', 'destinatario_telefono': '55443322', 'destinatario_email': 'a@a.com',
+        'origen': 'CABA', 'destino': 'Rosario', 'peso': '2.5', 'dimensiones': '10x10x10',
+        'acepta_ley': 'on'
+    }
+
+def simular_alta_envio(client):
+    """Loguea al operador y manda el formulario. Retorna la respuesta y la lista de envíos"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+    respuesta = client.post('/envios/nuevo', data=obtener_datos_envio_perfecto(), follow_redirects=True)
+    from app import envios
+    return respuesta, envios
+
+# ==========================================
+# CASO 13: ALTA DE ENVÍO - ATÓMICOS (US-01)
+# ==========================================
+
+def test_alta_envio_guarda_datos_correctamente(client):
+    """Prueba EXCLUSIVAMENTE que los datos viajen del form a la base de datos"""
+    _, envios = simular_alta_envio(client)
+    ultimo_envio = envios[-1]
+    
+    # Verificamos integridad de datos ingresados
+    assert ultimo_envio['remitente']['nombre'] == 'Carlos Test'
+    assert ultimo_envio['destino'] == 'Rosario'
+
+def test_alta_envio_genera_tracking_id_valido(client):
+    """Prueba EXCLUSIVAMENTE la regla de negocio de generación de Tracking ID"""
+    _, envios = simular_alta_envio(client)
+    tracking_generado = envios[-1]['tracking_id']
+    
+    # Verificamos el formato del ID
+    assert tracking_generado.startswith('LT-')
+    assert len(tracking_generado) > 5
+
+def test_alta_envio_asigna_estado_inicial_ingresado(client):
+    """Prueba EXCLUSIVAMENTE que el estado por defecto sea 'Ingresado'"""
+    _, envios = simular_alta_envio(client)
+    estado_asignado = envios[-1]['estado']
+    
+    # Verificamos la regla de estado inicial
+    assert estado_asignado == 'Ingresado'
+
+def test_alta_envio_muestra_mensaje_exito(client):
+    """Prueba EXCLUSIVAMENTE la respuesta visual (UI) para el usuario"""
+    respuesta, _ = simular_alta_envio(client)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos el feedback del sistema
+    assert "Envío creado con tracking ID" in texto_html
+
+# ==========================================
+# CASO 14: SEGURIDAD EN ALTA DE ENVÍO (US-01)
+# ==========================================
+def test_alta_envio_rol_no_autorizado(client):
+    """Prueba que un Transportista NO pueda acceder ni crear envíos (Romper el sistema)"""
+    # 1. Nos logueamos como Transportista (Rol más bajo)
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'}, follow_redirects=True)
+    
+    # 2. Intentamos entrar por la fuerza a la pantalla de nuevo envío
+    respuesta = client.get('/envios/nuevo', follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # 3. El decorador de Flask debería patearnos afuera
+    assert "No tenés permisos para acceder a esta pantalla" in texto_html
