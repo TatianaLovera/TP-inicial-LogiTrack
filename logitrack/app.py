@@ -594,6 +594,11 @@ def cargar_datos_ejemplo():
         envios.append(nuevo)
         registrar_auditoria(tracking, "Creación", "Registro de envío semilla.", "sistema")
 
+@app.errorhandler(404)
+def page_not_found(e):
+    # Forzamos el renderizado de tu archivo
+    return render_template('404.html'), 404
+
 cargar_datos_ejemplo()
 if __name__ == "__main__":
     
