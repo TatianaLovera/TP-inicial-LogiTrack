@@ -150,9 +150,9 @@ def listar_envios():
     date_to = request.args.get("date_to", "").strip()
     sort_by = request.args.get("sort", "fecha_creacion")
     sort_order = request.args.get("order", "desc")
-   try:
+    try:
     page = max(int(request.args.get("page", 1)), 1)
-except (ValueError, TypeError):
+    except (ValueError, TypeError):
     page = 1
     per_page = 10
 
