@@ -955,10 +955,52 @@ def test_paginacion_parametros_invalidos_no_crashean(client):
     # flask tiraría un Error 500 (Internal Server Error). 
     # Esta aserción fallará si tu app.py no ataja la conversión de letras a enteros.
     assert respuesta.status_code == 200
+
+
+# ==========================================
+# CASO 24: ERRORES AMIGABLES - ATÓMICOS (US-12)
+# ==========================================
+
+def test_error_404_personalizado(client):
+    """Prueba AC4: Si el usuario inventa una ruta, ve una página de error amigable"""
+    # Intentamos entrar a una URL que no existe en app.py
+    respuesta = client.get('/esta-ruta-no-existe-nunca')
+    
+    # El status debe ser 404
+    assert respuesta.status_code == 404
+    
+    texto_html = respuesta.data.decode('utf-8')
+    # Verificamos que aparezca el mensaje amigable definido en tu historia
+    assert "Página no encontrada" in texto_html
+    # Verificamos que exista el botón para volver
+    assert "Volver" in texto_html or "inicio" in texto_html.lower()
+
+def test_detalle_envio_inexistente_no_explota(client):
+    """Prueba AC1: Buscar un tracking ID que no existe no debe romper el servidor"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # ID de tracking inventado
+    respuesta = client.get('/envios/TRK-999999', follow_redirects=True)
+    
+    # El servidor no debe tirar Error 500. Debe redirigir o mostrar error.
+    assert respuesta.status_code == 200
+    texto_html = respuesta.data.decode('utf-8')
+    assert "Envío no encontrado" in texto_html
+
+def test_error_login_credenciales_invalidas_visual(client):
+    """Prueba AC3: El error de credenciales se muestra con el estilo correcto (rojo/alerta)"""
+    respuesta = client.post('/login', data={'usuario': 'hacker', 'password': '123'}, follow_redirects=True)
+    
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos el mensaje
+    assert "Usuario o contraseña incorrectos" in texto_html
+    # Verificamos que use una clase de CSS de alerta (Bootstrap 'danger' o similar)
+    assert "danger" in texto_html or "alert" in texto_html or "error" in texto_html
     
 
 # ==========================================
-# CASO 25: DASHBOARD DE SUPERVISOR (US-13)
+# CASO 26: DASHBOARD DE SUPERVISOR (US-13)
 # ==========================================
 
 def test_dashboard_acceso_exclusivo_supervisor(client):
