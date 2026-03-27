@@ -151,9 +151,11 @@ def listar_envios():
     sort_by = request.args.get("sort", "fecha_creacion")
     sort_order = request.args.get("order", "desc")
     try:
-    page = max(int(request.args.get("page", 1)), 1)
+        page = int(request.args.get("page", 1))
+        if page < 1:
+            page = 1
     except (ValueError, TypeError):
-    page = 1
+        page = 1
     per_page = 10
 
     resultado = sorted(envios, key=lambda x: parse_fecha(x["fecha_creacion"]), reverse=True)
