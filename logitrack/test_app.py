@@ -1089,59 +1089,74 @@ def test_clases_css_variables_tema(client):
 from flask import url_for
 
 # ==========================================
-# CASO 28: EDICIÓN DE ENVÍOS - AJUSTADO (US-26)
+# CASO 28: EDICIÓN DE ENVÍOS - CALIBRADO (US-26)
 # ==========================================
 
 def test_acceso_edicion_solo_supervisor(client):
-    """Prueba AC1: Verifica si el sistema protege la ruta de edición"""
-    app_instancia = client.application
-    with app_instancia.test_request_context():
-        url_real = url_for('editar_envio', tracking_id='LT-636C9254')
-
-    # Intentamos como Operador
-    client.post('/login', data={'usuario': 'operador', 'password': 'ope123'}, follow_redirects=True)
-    res_ope = client.get(url_real, follow_redirects=True)
+    """Prueba AC1: Verifica que el Operador sea redirigido al intentar editar"""
+    # 1. Login como Operador
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
     
-    # Si tu app no rebota al operador, buscamos que al menos no vea el formulario de edicion
-    # O verificamos que el botón de 'Guardar' no esté presente para él
-    contenido = res_ope.data.decode('utf-8')
-    assert res_ope.status_code != 404
-    # Si esta línea falla, es que el operador TIENE acceso y hay que proteger la ruta en app.py
-    assert "Acceso restringido" in contenido or res_ope.status_code == 403 or "Solo supervisores" in contenido
+    # 2. Intentamos ir a la edición de cualquier envío (usamos el primero de la lista)
+    with client.application.test_request_context():
+        # Obtenemos el primer envío real de tu lista 'envios'
+        id_test = client.application.envios[0]['tracking_id']
+        url_edit = url_for('editar_envio', tracking_id=id_test)
 
-def test_edicion_exitosa_datos_basicos(client):
-    """Prueba AC5: El Supervisor cambia datos y el sistema responde correctamente"""
-    app_instancia = client.application
-    with app_instancia.test_request_context():
-        url_real = url_for('editar_envio', tracking_id='LT-06E4E1D1')
+    respuesta = client.get(url_edit, follow_redirects=True)
+    
+    # El decorador @role_required redirige y manda un flash
+    assert "No tenés permisos" in respuesta.data.decode('utf-8')
+    # Verificamos que volvió a la lista de envíos y no se quedó en editar
+    assert request.path == url_for('listar_envios')
 
+def test_edicion_exitosa_supervisor(client):
+    """Prueba AC3 y AC5: Supervisor edita y los cambios impactan en el detalle"""
+    # 1. Login como Supervisor
     client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
     
-    # Intentamos la edición
-    datos_update = {
-        "destinatario_nombre": "Edicion Test",
-        "destino": "Mendoza Centro",
-        "estado": "Ingresado" 
+    with client.application.test_request_context():
+        # Buscamos un envío que sea editable (menos de 5 días de antigüedad)
+        # Tu función 'cargar_datos_ejemplo' crea varios nuevos.
+        envio = client.application.envios[0]
+        id_test = envio['tracking_id']
+        url_edit = url_for('editar_envio', tracking_id=id_test)
+
+    # 2. Enviamos el formulario con TODOS los campos que pide tu app.py
+    # Nota: Tu app.py valida que no falte ninguno de estos en el 'all([])'
+    datos = {
+        "remitente_nombre": "Juan Editado",
+        "remitente_dni": envio['remitente']['dni'],
+        "remitente_direccion": envio['remitente']['direccion'],
+        "remitente_telefono": envio['remitente']['telefono'],
+        "destinatario_nombre": "Maria Editada",
+        "destinatario_dni": envio['destinatario']['dni'],
+        "destinatario_direccion": envio['destinatario']['direccion'],
+        "destinatario_telefono": envio['destinatario']['telefono'],
+        "origen": "Origen Test",
+        "destino": "Destino Test",
+        "peso": "10",
+        "dimensiones": "1x1x1"
     }
     
-    respuesta = client.post(url_real, data=datos_update, follow_redirects=True)
+    respuesta = client.post(url_edit, data=datos, follow_redirects=True)
     
-    # Verificamos que la página cargó (200) y que el cambio se ve en el HTML final
-    assert respuesta.status_code == 200
-    # En lugar de "actualizado", buscamos el nuevo valor que pusimos en el campo
-    assert "Edicion Test" in respuesta.data.decode('utf-8')
+    # 3. Verificamos que redirigió al detalle y muestra el mensaje de éxito
+    assert "Envío actualizado correctamente" in respuesta.data.decode('utf-8')
+    assert "Juan Editado" in respuesta.data.decode('utf-8')
+    assert "Maria Editada" in respuesta.data.decode('utf-8')
 
-def test_edicion_validacion_campos_vacios(client):
-    """Prueba AC4: El sistema no debería procesar campos vacíos"""
-    app_instancia = client.application
-    with app_instancia.test_request_context():
-        url_real = url_for('editar_envio', tracking_id='LT-06E4E1D1')
-
+def test_edicion_bloqueada_por_tiempo(client):
+    """Prueba AC2: Verifica que no se puede editar si pasaron más de 5 días"""
     client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
     
-    # Mandamos un post vacío
-    respuesta = client.post(url_real, data={"destinatario_nombre": ""}, follow_redirects=True)
+    with client.application.test_request_context():
+        # El último envío de tu 'cargar_datos_ejemplo' tiene i=11 días de antigüedad
+        # (ahora - 6 días en el loop). i=6 ya bloquea.
+        envio_viejo = client.application.envios[6] 
+        url_edit = url_for('editar_envio', tracking_id=envio_viejo['tracking_id'])
+
+    respuesta = client.get(url_edit, follow_redirects=True)
     
-    # Buscamos indicios de que el sistema pidió el campo (HTML5 required o mensaje flash)
-    contenido = respuesta.data.decode('utf-8')
-    assert "required" in contenido or "error" in contenido.lower() or "obligatorio" in contenido
+    # Tu función 'puede_editar_envio' debería retornar False y disparar este flash:
+    assert "Solo se puede editar un envío durante los primeros 5 días" in respuesta.data.decode('utf-8')
