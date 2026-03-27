@@ -724,8 +724,10 @@ def test_historial_agrega_nuevo_evento_dinamicamente(client):
     respuesta = client.get(f'/envios/{tracking}')
     texto_html = respuesta.data.decode('utf-8')
     
-    # 1. Verificamos que el evento original (Ingresado) siga existiendo
-    assert "Envío creado en el sistema" in texto_html
+    # 1. Verificamos que el evento original siga existiendo. 
+    # CORRECCIÓN: Los datos semilla de app.py usan la nota "Envío de ejemplo."
+    assert "Envío de ejemplo." in texto_html
+    assert "Ingresado" in texto_html
     
     # 2. Verificamos que el nuevo evento se haya sumado a la pantalla
     assert nota_unica in texto_html
