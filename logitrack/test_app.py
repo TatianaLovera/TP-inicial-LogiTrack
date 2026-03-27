@@ -660,7 +660,7 @@ def test_auditoria_inmutabilidad_bloqueo_metodos(client):
     assert respuesta_post.status_code == 405
 
 # ==========================================
-# CASO 19: HISTORIAL VISIBLE - ATÓMICOS (US-07)
+# CASO 20: HISTORIAL VISIBLE - ATÓMICOS (US-07)
 # ==========================================
 
 def test_historial_estado_inicial_tras_alta(client):
@@ -732,3 +732,53 @@ def test_historial_agrega_nuevo_evento_dinamicamente(client):
     # 2. Verificamos que el nuevo evento se haya sumado a la pantalla
     assert nota_unica in texto_html
     assert "Cancelado" in texto_html
+
+# ==========================================
+# CASO 21: ROLES SIMULADOS Y RUTEO - ATÓMICOS (US-08)
+# ==========================================
+
+def test_login_redireccion_supervisor_panel(client):
+    """Prueba ruteo inteligente: El Supervisor aterriza en el Dashboard (/panel)"""
+    datos_login = {'usuario': 'supervisor', 'password': 'sup123'}
+    
+    # Ponemos follow_redirects=False para interceptar hacia dónde lo manda el servidor
+    respuesta = client.post('/login', data=datos_login, follow_redirects=False)
+    
+    # Debe ser un HTTP 302 (Redirección)
+    assert respuesta.status_code == 302
+    # El destino final debe ser la ruta del panel
+    assert '/panel' in respuesta.location
+
+def test_login_redireccion_transportista_hoja_ruta(client):
+    """Prueba ruteo inteligente AC4: El Transportista aterriza en su Hoja de Ruta"""
+    datos_login = {'usuario': 'transportista', 'password': 'tra123'}
+    
+    respuesta = client.post('/login', data=datos_login, follow_redirects=False)
+    
+    assert respuesta.status_code == 302
+    assert '/hoja-ruta' in respuesta.location
+
+def test_hoja_ruta_muestra_solo_asignados(client):
+    """Prueba AC4 (Filtro): La Hoja de Ruta no debe mezclar paquetes de otros choferes"""
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'})
+    
+    # Entramos a la hoja de ruta del chofer
+    respuesta = client.get('/hoja-ruta')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificamos que esté viendo SUS paquetes (En app.py, María García está asignada a "transportista")
+    assert "María García" in texto_html
+    
+    # Verificamos que NO esté viendo paquetes ajenos o sin asignar (Roberto López de Tech S.A. no tiene chofer)
+    assert "Roberto López" not in texto_html
+
+def test_transportista_bloqueado_auditoria(client):
+    """Prueba AC5: Seguridad. El Transportista es rebotado si intenta espiar la Auditoría"""
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'})
+    
+    # Intenta entrar por la URL directa
+    respuesta = client.get('/auditoria', follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El decorador @role_required debe atajarlo
+    assert "No tenés permisos para acceder a esta pantalla" in texto_html
