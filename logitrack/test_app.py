@@ -1333,3 +1333,64 @@ def test_cierre_acceso_envio_entregado(client):
     
     # El ID del envío entregado NO debe estar en la lista de trabajo actual
     assert id_entregado not in html
+
+# ==========================================
+# CASO 35: FILTROS POR FECHA (US-35)
+# ==========================================
+
+def test_filtro_fechas_interfaz_presente(client):
+    """Prueba AC1: Verifica la existencia de los inputs de fecha en el listado"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    respuesta = client.get('/envios')
+    html = respuesta.data.decode('utf-8')
+    
+    # Buscamos los 'name' exactos que lee tu app.py (date_from y date_to)
+    assert 'name="date_from"' in html
+    assert 'name="date_to"' in html
+    # Idealmente, deberían ser de type="date" para que aparezca el calendario en el navegador
+    assert 'type="date"' in html
+
+def test_filtro_fechas_camino_feliz(client):
+    """Prueba AC3: Aplicar un rango válido muy amplio debe devolver resultados"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Mandamos un rango enorme (2020 a 2030) que seguro atrapa los datos de ejemplo
+    respuesta = client.get('/envios?date_from=2020-01-01&date_to=2030-01-01')
+    html = respuesta.data.decode('utf-8')
+    
+    assert respuesta.status_code == 200
+    # Verificamos que uno de los remitentes de tu semilla ("Juan Pérez") esté en la tabla
+    assert "Juan Pérez" in html
+
+def test_filtro_fechas_sin_resultados(client):
+    """Prueba de robustez: Un rango donde no hay envíos devuelve lista vacía sin crashear"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Filtramos un rango absurdo en el pasado (año 2000)
+    respuesta = client.get('/envios?date_from=2000-01-01&date_to=2000-12-31')
+    html = respuesta.data.decode('utf-8')
+    
+    assert respuesta.status_code == 200
+    # Al no haber datos, "Juan Pérez" no debería estar renderizado en la tabla
+    assert "Juan Pérez" not in html 
+
+def test_filtro_fechas_inverso_rompe_todo(client):
+    """Prueba AC2: Fecha 'Hasta' anterior a 'Desde' no crashea, devuelve vacío"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Mandamos al revés: Desde diciembre hasta enero del mismo año
+    respuesta = client.get('/envios?date_from=2026-12-31&date_to=2026-01-01')
+    html = respuesta.data.decode('utf-8')
+    
+    assert respuesta.status_code == 200
+    # El backend de app.py evalúa ambas reglas. Al ser mutuamente excluyentes, el resultado es 0.
+    assert "Juan Pérez" not in html
+
+def test_filtro_fechas_boton_limpiar(client):
+    """Prueba AC4: Presencia del botón/link para resetear los filtros"""
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    respuesta = client.get('/envios')
+    html = respuesta.data.decode('utf-8').lower()
+    
+    # Buscamos la palabra limpiar (suele ser un link <a href="/envios">Limpiar</a>)
+    assert "limpiar" in html or "reset" in html
