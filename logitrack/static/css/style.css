@@ -284,6 +284,12 @@ body.sidebar-open .main-content {
     box-shadow: var(--shadow);
 }
 
+/* Colores para la IA de Prioridad */
+.badge-alta { background-color: #fee2e2; color: #b91c1c; font-weight: bold; }  /* Rojo claro con texto rojo oscuro */
+.badge-media { background-color: #fef3c7; color: #b45309; font-weight: bold; } /* Amarillo claro con texto naranja */
+.badge-baja { background-color: #dcfce7; color: #15803d; font-weight: bold; }  /* Verde claro con texto verde oscuro */
+.badge-normal { background-color: #f3f4f6; color: #374151; font-weight: bold; } /* Gris por defecto */
+
 @keyframes slideIn {
     from { transform: translateX(100%); opacity: 0; }
     to   { transform: translateX(0);    opacity: 1; }
