@@ -1,6 +1,9 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import jsonify
 import uuid
 import datetime
+import joblib
+import random
 from math import ceil
 
 app = Flask(__name__)
@@ -8,6 +11,14 @@ app.secret_key = "logitrack-secret-2024"
 
 envios = []
 audit_logs = []
+
+# Cargar el modelo de IA en memoria
+try:
+    modelo_ia = joblib.load('models/modelo_prioridad.pkl')
+    print("🤖 Modelo de IA cargado correctamente y listo para predecir.")
+except Exception as e:
+    modelo_ia = None
+    print("⚠️ No se encontró el modelo de IA. Primero ejecutá ml_prioridad.py")
 
 USUARIOS = {
     "operador": {"password": "op123", "rol": "Operador"},
@@ -237,6 +248,7 @@ def listar_envios():
 
 @app.route("/envios/nuevo", methods=["GET", "POST"])
 @role_required("Supervisor", "Operador")
+
 def nuevo_envio():
     if request.method == "POST":
         remitente_nombre = request.form.get("remitente_nombre", "").strip()
@@ -264,10 +276,27 @@ def nuevo_envio():
             flash("Debés aceptar términos y política de privacidad para crear el envío.", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
+        # ==========================================
+        # 🤖 LÓGICA DE MACHINE LEARNING ACÁ
+        # ==========================================
+        peso_float = float(peso) if peso else 0.0
+        distancia_simulada = random.randint(10, 2000) 
+        es_express = random.choice([0, 1])
+        
+        prioridad_calc = "Normal" # Valor por defecto por si la IA falla
+        if modelo_ia:
+            try:
+                pred = modelo_ia.predict([[distancia_simulada, peso_float, es_express]])
+                prioridad_calc = pred[0]
+            except Exception as e:
+                print(f"Error al calcular IA: {e}")
+        # ==========================================
+
         usuario, _ = get_usuario()
         fecha = ahora_str()
         nuevo = {
             "tracking_id": generar_tracking_id(),
+            "prioridad": prioridad_calc,  # <--- SE AGREGA EL RESULTADO DE LA IA ACÁ
             "remitente": {
                 "nombre": remitente_nombre,
                 "dni": remitente_dni,
@@ -306,6 +335,8 @@ def nuevo_envio():
         return redirect(url_for("detalle_envio", tracking_id=nuevo["tracking_id"]))
 
     return render_template("nuevo_envio.html", form={}, **get_usuario_context())
+
+
 
 
 @app.route("/envios/<tracking_id>")
@@ -598,6 +629,52 @@ def cargar_datos_ejemplo():
 def page_not_found(e):
     # Forzamos el renderizado de tu archivo
     return render_template('404.html'), 404
+
+# ==========================================
+# MOCK API RESTFUL (Devuelve JSON puro)
+# ==========================================
+
+@app.route('/api/envios', methods=['GET'])
+def api_get_envios():
+    """Retorna todos los envíos en formato JSON"""
+    return jsonify({
+        "status": "success", 
+        "total": len(envios), 
+        "data": envios
+    }), 200
+
+@app.route('/api/envios/<tracking_id>', methods=['GET'])
+def api_get_envio_detalle(tracking_id):
+    """Retorna el detalle de un envío específico"""
+    envio = next((e for e in envios if e['tracking_id'] == tracking_id), None)
+    if envio:
+        return jsonify({"status": "success", "data": envio}), 200
+    return jsonify({"status": "error", "message": "Envío no encontrado"}), 404
+
+@app.route('/api/predecir', methods=['POST'])
+def api_predecir_prioridad():
+    """Endpoint para predecir la prioridad usando IA"""
+    if not modelo_ia:
+        return jsonify({"error": "Modelo de IA no disponible"}), 500
+
+    datos = request.json
+    try:
+        # Extraemos los datos que nos mandan
+        distancia = float(datos.get('distancia_km', 0))
+        peso = float(datos.get('peso_kg', 0))
+        express = int(datos.get('es_express', 0))
+
+        # Le pasamos los datos al cerebro (espera una lista de listas)
+        prediccion = modelo_ia.predict([[distancia, peso, express]])
+        prioridad_calculada = prediccion[0]
+
+        return jsonify({
+            "status": "success",
+            "prioridad_sugerida": prioridad_calculada,
+            "inputs": datos
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
 
 cargar_datos_ejemplo()
 if __name__ == "__main__":

@@ -1,30 +1,33 @@
-# LogiTrack — Sistema de Seguimiento de Envíos
+# LogiTrack — Sistema Federal de Gestión de Envíos
 
-Prototipo funcional desarrollado con Flask (Python).  
-Almacenamiento en memoria (sin base de datos real).
+Prototipo funcional (MVP) desarrollado con Flask (Python). 
+Incluye funcionalidades de despliegue continuo (CI/CD), pruebas automatizadas, Mock API RESTful y un modelo de Machine Learning para asignación inteligente de prioridades. Almacenamiento en memoria (sin base de datos real en esta fase).
 
 ---
 
-## Estructura del proyecto
+## 📂 Estructura del proyecto
 
-```
+```text
 logitrack/
-├── app.py                  # Aplicación Flask principal
-├── requirements.txt        # Dependencias
-├── README.md
+├── app.py                  # Aplicación Flask principal (Backend & Mock API)
+├── ml_prioridad.py         # Script de entrenamiento del modelo de IA
+├── test_app.py             # Suite de pruebas automatizadas (QA)
+├── requirements.txt        # Dependencias del proyecto
+├── README.md               # Documentación principal
+├── models/                 # Cerebros de Inteligencia Artificial
+│   └── modelo_prioridad.pkl
+├── docs/                   # Documentación técnica
+│   └── swagger.yaml        # Contrato OpenAPI (Swagger)
 ├── static/
-│   ├── css/
-│   │   └── style.css       # Estilos globales
-│   └── js/
-│       └── main.js         # Scripts del cliente
-└── templates/
+│   ├── css/style.css       # Estilos globales
+│   └── js/main.js          # Scripts del cliente
+└── templates/              # Vistas HTML (Jinja2)
     ├── base.html           # Layout base con navbar
     ├── login.html          # Pantalla de inicio de sesión
     ├── panel.html          # Dashboard con estadísticas
-    ├── listar.html         # Listado y búsqueda de envíos
+    ├── listar.html         # Listado, búsqueda y prioridad IA
     ├── nuevo_envio.html    # Formulario de alta
-    └── detalle.html        # Detalle + cambio de estado
-```
+    └── detalle.html        # Detalle, ofuscación y auditoría
 
 ---
 
@@ -55,13 +58,27 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Ejecutar la aplicación
+### 3. Entrenar el modelo de Inteligencia Artificial (Opcional/Primera vez)
+Genera el dataset semilla y entrena el algoritmo Random Forest para predecir prioridades.
+
+```bash
+python ml_prioridad.py
+```
+
+### 4.Ejecutar pruebas automatizadas (QA)
+Ejecuta la suite de pruebas unitarias y de integración configuradas para el pipeline de CI.
+
+```bash
+pytest test_app.py -v
+```
+
+### 5. Ejecutar la aplicación
 
 ```bash
 python app.py
 ```
 
-### 4. Abrir en el navegador
+### 6. Abrir en el navegador
 
 ```
 http://localhost:5000
@@ -71,40 +88,33 @@ http://localhost:5000
 
 ## Usuarios de prueba
 
-| Usuario    | Contraseña | Rol        |
-|------------|------------|------------|
-| operador   | op123      | Operador   |
-| supervisor | sup123     | Supervisor |
+| Usuario        | Contraseña | Rol           |
+|----------------|------------|---------------|
+| operador       | op123      | Operador      |
+| supervisor     | sup123     | Supervisor    |
+| transportista  | tra123     | Transportista |
 
 ---
 
-## Diferencia de roles
+## Funcionalidades destacadas (MVP)
 
-| Acción                         | Operador | Supervisor |
-|--------------------------------|----------|------------|
-| Ver envíos                     | ✅       | ✅         |
-| Crear envíos                   | ✅       | ✅         |
-| Avanzar al siguiente estado    | ✅       | ✅         |
-| Cambiar a cualquier estado     | ❌       | ✅         |
+- **Inteligencia Artificial (Machine Learning):** Asignación automática de prioridad logística `Alta, Media, Baja` mediante un modelo Random Forest basado en distancia, peso y modalidad.
 
----
+- **Mock API RESTful:** `/api/envios` documentada con estándar OpenAPI `Swagger` para futuras integraciones móviles.
 
-## Funcionalidades
+- **Privacidad desde el Diseño `Ley 25.326`:** Ofuscación dinámica de datos sensibles `DNI` según el rol del usuario mediante renderizado SSR.
 
-- **Alta de envío** con remitente (nombre, DNI, dirección, teléfono, email) y destinatario (nombre, DNI, dirección, teléfono, email), origen, destino y descripción
-- **Tracking ID automático** con formato `LT-XXXXXXXX`
-- **Listado de envíos** con tabla paginable
-- **Búsqueda** por tracking ID, nombre del remitente o nombre del destinatario
-- **Detalle de envío** con historial completo de estados
-- **Cambio de estado** con nota y registro de usuario/fecha
-- **Roles** Operador (avance secuencial) y Supervisor (libre)
-- **Hoja de ruta** para transportistas con información completa del destinatario (nombre, dirección, teléfono)
-- **Privacidad de datos** Los datos personales (DNI, dirección, teléfono, email) solo son visibles para supervisores
-- **Datos de ejemplo** cargados al iniciar para demo rápida
+- **Auditoría Inmutable:** Registro automático de usuario, fecha y cambios de estado logístico.
 
----
+- **Alta de envío:** Generación automática de Tracking ID `LT-XXXXXXXX` y validación de términos de servicio.
+
+- **Dashboard y Búsqueda:** Tabla paginable, ordenamiento dinámico, filtros por fecha y estadísticas en tiempo real.
+
 
 ## Notas
 
 - Los datos se pierden al reiniciar el servidor (almacenamiento en memoria).
 - Para persistencia real, reemplazar la lista `envios` por una base de datos (SQLite, PostgreSQL, etc.).
+- Persistencia: Los datos se reinician al apagar el servidor (almacenamiento en memoria para agilidad del MVP).
+- Desacoplamiento: El modelo predictivo fue entrenado de forma aislada y acoplado al backend vía serialización (joblib), garantizando la separación de responsabilidades.
+- CI/CD: El repositorio cuenta con GitHub Actions configurado para validación de código (Flake8) y ejecución de tests (Pytest) ante cada Pull Request.
