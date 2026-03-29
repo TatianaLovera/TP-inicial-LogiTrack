@@ -46,6 +46,7 @@
 
                 <th><a href="{{ url_for('listar_envios', q=busqueda, date_from=date_from, date_to=date_to, sort='estado', order='asc' if sort_by == 'estado' and sort_order == 'desc' else 'desc') }}">Estado{% if sort_by == 'estado' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 <th><a href="{{ url_for('listar_envios', q=busqueda, date_from=date_from, date_to=date_to, sort='peso', order='asc' if sort_by == 'peso' and sort_order == 'desc' else 'desc') }}">Peso{% if sort_by == 'peso' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
+                <th>Envío express</th>
                 <th><a href="{{ url_for('listar_envios', q=busqueda, date_from=date_from, date_to=date_to, sort='fecha_creacion', order='asc' if sort_by == 'fecha_creacion' and sort_order == 'desc' else 'desc') }}">Fecha{% if sort_by == 'fecha_creacion' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 <th>Acciones</th>
             </tr>
@@ -69,6 +70,7 @@
 
                 <td><span class="badge badge-{{ envio.estado | replace(' ', '-') | lower }}">{{ envio.estado }}</span></td>
                 <td>{{ envio.peso }} kg</td>
+                <td>{{ 'Sí' if envio.envio_express else 'No' }}</td>
                 <td>{{ envio.fecha_creacion }}</td>
                 <td><a href="{{ url_for('detalle_envio', tracking_id=envio.tracking_id) }}" class="btn btn-sm">Ver detalle</a></td>
             </tr>
