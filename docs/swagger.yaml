@@ -1,0 +1,48 @@
+openapi: 3.0.0
+info:
+  title: LogiTrack Mock API
+  description: API RESTful simulada para la gestión del ciclo de vida de envíos logísticos.
+  version: 1.0.0
+servers:
+  - url: https://logitrack-fj41.onrender.com/api
+    description: Servidor de Staging (Render)
+  - url: http://127.0.0.1:5000/api
+    description: Servidor Local
+paths:
+  /envios:
+    get:
+      summary: Obtener listado de envíos
+      description: Retorna todos los envíos registrados en la Mock API.
+      responses:
+        '200':
+          description: Operación exitosa
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  total:
+                    type: integer
+                    example: 15
+                  data:
+                    type: array
+                    items:
+                      type: object
+  /envios/{tracking_id}:
+    get:
+      summary: Obtener detalle de un envío
+      parameters:
+        - in: path
+          name: tracking_id
+          required: true
+          schema:
+            type: string
+          description: Tracking ID único (ej. LT-A1B2C3D4)
+      responses:
+        '200':
+          description: Envío encontrado
+        '404':
+          description: Envío no encontrado
