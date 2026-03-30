@@ -1,6 +1,15 @@
+import sys
+import os
+# Le decimos a Python que busque módulos una carpeta más atrás (donde está app.py)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import pytest
 from flask import url_for, request
 from app import app, envios
+
+
+from app import app, envios 
+# (Y a partir de acá sigue todo el código de Tati igual que antes...)
 
 # ==========================================
 # FIXTURE: CONFIGURACIÓN DEL ENTORNO DE TEST
