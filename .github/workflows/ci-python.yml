@@ -39,4 +39,4 @@ jobs:
 
     - name: Ejecutar Tests Mínimos (Pytest)
       run: |
-        pytest tests/
+        env PYTHONPATH=. pytest tests/
