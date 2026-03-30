@@ -27,7 +27,7 @@ for i in range(cantidad_datos):
     elif distancias_km[i] > 1000 and pesos_kg[i] < 5:
         prioridades.append("Media")
     else:
-        prioridades.append("Baja")
+        prioridades.append("Normal")
 
 # Armamos el DataFrame (Tabla)
 df = pd.DataFrame({
