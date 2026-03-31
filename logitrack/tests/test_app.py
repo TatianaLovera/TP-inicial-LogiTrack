@@ -79,12 +79,14 @@ def test_alta_envio_requiere_ley(client):
     
     # 2. Mandamos todos los campos llenos pero SIN enviar 'acepta_ley'
     datos_formulario = {
-        'remitente_nombre': 'Juan', 'remitente_dni': '111', 
-        'remitente_direccion': 'Dir 1', 'remitente_telefono': '123', 'remitente_email': 'a@a.com',
-        'destinatario_nombre': 'Maria', 'destinatario_dni': '222', 
-        'destinatario_direccion': 'Dir 2', 'destinatario_telefono': '321', 'destinatario_email': 'b@b.com',
-        'origen': 'A', 'destino': 'B', 'peso': '10', 'dimensiones': '1x1x1'
-    }
+            'remitente_nombre': 'Juan', 'remitente_dni': '111',
+            'remitente_direccion': 'Dir 1', 'remitente_telefono': '123456',  # <-- Corregido (6 dígitos)
+            'remitente_email': 'a@a.com',
+            'destinatario_nombre': 'Maria', 'destinatario_dni': '222',
+            'destinatario_direccion': 'Dir 2', 'destinatario_telefono': '654321',  # <-- Corregido (6 dígitos)
+            'destinatario_email': 'b@b.com',
+            'origen': 'A', 'destino': 'B', 'peso': '10', 'dimensiones': '1x1x1'
+        }
     
     respuesta = client.post('/envios/nuevo', data=datos_formulario, follow_redirects=True)
     
@@ -1121,42 +1123,43 @@ def test_acceso_edicion_solo_supervisor(client):
     assert "No tenés permisos" in respuesta.data.decode('utf-8')
     assert request.path == url_lista
 
-def test_edicion_exitosa_supervisor(client):
-    """Prueba AC3 y AC5: Supervisor edita campos y el sistema impacta los cambios"""
-    from app import envios 
-    
-    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
-    
-    with client.application.test_request_context():
-        # Usamos el primer envío (que es de hoy, por ende, es editable)
-        envio = envios[0]
-        id_test = envio['tracking_id']
-        url_edit = url_for('editar_envio', tracking_id=id_test)
+    def test_edicion_exitosa_supervisor(client):
+        """Prueba AC3 y AC5: Supervisor edita campos y el sistema impacta los cambios"""
+        from app import envios
 
-    # Mandamos todos los campos como pide tu validación
-    datos = {
-        "remitente_nombre": "Juan Editado",
-        "remitente_dni": envio['remitente']['dni'],
-        "remitente_direccion": envio['remitente']['direccion'],
-        "remitente_telefono": envio['remitente']['telefono'],
-        "remitente_email": envio['remitente'].get('email', ''),
-        "destinatario_nombre": "Maria Editada",
-        "destinatario_dni": envio['destinatario']['dni'],
-        "destinatario_direccion": envio['destinatario']['direccion'],
-        "destinatario_telefono": envio['destinatario']['telefono'],
-        "destinatario_email": envio['destinatario'].get('email', ''),
-        "origen": "Origen Editado",
-        "destino": "Destino Editado",
-        "peso": "15",
-        "dimensiones": "20x20x20"
-    }
-    
-    respuesta = client.post(url_edit, data=datos, follow_redirects=True)
-    
-    # Validamos que salió todo bien
-    contenido = respuesta.data.decode('utf-8')
-    assert "actualizado correctamente" in contenido.lower()
-    assert "Juan Editado" in contenido
+        client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+
+        with client.application.test_request_context():
+            # ¡LA CLAVE ESTÁ ACÁ! Buscamos un envío que NO esté en estado final
+            envio = next(e for e in envios if e["estado"] not in ["Cancelado", "Entregado", "Entregado a remitente"])
+            id_test = envio['tracking_id']
+            url_edit = url_for('editar_envio', tracking_id=id_test)
+
+        # Mandamos todos los campos como pide tu validación
+        datos = {
+            "remitente_nombre": "Nombre Totalmente Nuevo",
+            "remitente_dni": envio['remitente']['dni'],
+            "remitente_direccion": envio['remitente']['direccion'],
+            "remitente_telefono": envio['remitente']['telefono'],
+            "remitente_email": envio['remitente'].get('email', ''),
+            "destinatario_nombre": "Maria Editada",
+            "destinatario_dni": envio['destinatario']['dni'],
+            "destinatario_direccion": envio['destinatario']['direccion'],
+            "destinatario_telefono": envio['destinatario']['telefono'],
+            "destinatario_email": envio['destinatario'].get('email', ''),
+            "origen": "Origen Editado",
+            "destino": "Destino Editado",
+            "peso": "15",
+            "dimensiones": "20x20x20",
+            "descripcion": "Descripción de prueba editada"
+        }
+
+        respuesta = client.post(url_edit, data=datos, follow_redirects=True)
+
+        # Validamos que salió todo bien verificando la "base de datos"
+        envio_editado = next(e for e in envios if e['tracking_id'] == id_test)
+        assert envio_editado["remitente"]["nombre"] == "Nombre Totalmente Nuevo"
+        assert envio_editado["origen"] == "Origen Editado"
 
 def test_edicion_bloqueada_por_tiempo(client):
     """Prueba AC2: Verifica bloqueo de edición después de 5 días"""

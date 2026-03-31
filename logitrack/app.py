@@ -4,6 +4,7 @@ import uuid
 import datetime
 import joblib
 import random
+import re
 from math import ceil
 
 app = Flask(__name__)
@@ -71,7 +72,32 @@ def puede_editar_envio(envio):
     _, rol = get_usuario()
     if rol != "Supervisor":
         return False
+    # Estados finales - no se pueden editar
+    estados_finales = ["Cancelado", "Entregado", "Entregado a remitente"]
+    if envio["estado"] in estados_finales:
+        return False
     return ahora() - parse_fecha(envio["fecha_creacion"]) <= datetime.timedelta(days=5)
+
+
+def validar_dni(dni):
+    """Valida que el DNI tenga solo números"""
+    return bool(re.match(r"^\d+$", dni))
+
+
+def validar_telefono(telefono):
+    """Valida que el teléfono tenga solo números (ignorando guiones y espacios)"""
+    # Limpiamos guiones y espacios para la validación
+    telefono_limpio = telefono.replace("-", "").replace(" ", "")
+    return bool(re.match(r"^\d+$", telefono_limpio)) and len(telefono_limpio) >= 6
+
+
+def validar_email(email):
+    """Valida que el email tenga formato válido: una arroba y un dominio con extensión"""
+    if email == "":
+        return True  # Email es opcional
+    # Patrón: algo@algo.extensión
+    patron = r"^[a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    return bool(re.match(patron, email))
 
 
 def registrar_auditoria(tracking_id, accion, detalle, usuario=None):
@@ -274,6 +300,36 @@ def nuevo_envio():
             flash("Por favor completá todos los campos obligatorios.", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
+        # Validar DNI remitente
+        if not validar_dni(remitente_dni):
+            flash("DNI del remitente debe contener solo números.", "error")
+            return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
+
+        # Validar DNI destinatario
+        if not validar_dni(destinatario_dni):
+            flash("DNI del destinatario debe contener solo números.", "error")
+            return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
+
+        # Validar teléfono remitente
+        if not validar_telefono(remitente_telefono):
+            flash("Teléfono del remitente debe contener solo números.", "error")
+            return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
+
+        # Validar teléfono destinatario
+        if not validar_telefono(destinatario_telefono):
+            flash("Teléfono del destinatario debe contener solo números.", "error")
+            return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
+
+        # Validar email remitente
+        if remitente_email and not validar_email(remitente_email):
+            flash("Email del remitente inválido. Debe contener @ y dominio válido.", "error")
+            return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
+
+        # Validar email destinatario
+        if destinatario_email and not validar_email(destinatario_email):
+            flash("Email del destinatario inválido. Debe contener @ y dominio válido.", "error")
+            return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
+
         if not acepta_ley:
             flash("Debés aceptar términos y política de privacidad para crear el envío.", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
@@ -375,7 +431,12 @@ def editar_envio(tracking_id):
         flash("Envío no encontrado.", "error")
         return redirect(url_for("listar_envios"))
     if not puede_editar_envio(envio):
-        flash("Solo se puede editar un envío durante los primeros 5 días desde su creación.", "error")
+        # Verificar si es porque está en estado final
+        estados_finales = ["Cancelado", "Entregado", "Entregado a remitente"]
+        if envio["estado"] in estados_finales:
+            flash("No se puede editar un envío con estado final (Cancelado, Entregado o Entregado a remitente).", "error")
+        else:
+            flash("Solo se puede editar un envío durante los primeros 5 días desde su creación.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
     if request.method == "POST":
@@ -398,6 +459,36 @@ def editar_envio(tracking_id):
 
         if not all([remitente_nombre, remitente_dni, remitente_direccion, remitente_telefono, destinatario_nombre, destinatario_dni, destinatario_direccion, destinatario_telefono, origen, destino, peso, dimensiones]):
             flash("Todos los campos obligatorios deben estar completos.", "error")
+            return render_template("editar_envio.html", envio=envio, **get_usuario_context())
+
+        # Validar DNI remitente
+        if not validar_dni(remitente_dni):
+            flash("DNI del remitente debe contener solo números.", "error")
+            return render_template("editar_envio.html", envio=envio, **get_usuario_context())
+
+        # Validar DNI destinatario
+        if not validar_dni(destinatario_dni):
+            flash("DNI del destinatario debe contener solo números.", "error")
+            return render_template("editar_envio.html", envio=envio, **get_usuario_context())
+
+        # Validar teléfono remitente
+        if not validar_telefono(remitente_telefono):
+            flash("Teléfono del remitente debe contener solo números.", "error")
+            return render_template("editar_envio.html", envio=envio, **get_usuario_context())
+
+        # Validar teléfono destinatario
+        if not validar_telefono(destinatario_telefono):
+            flash("Teléfono del destinatario debe contener solo números.", "error")
+            return render_template("editar_envio.html", envio=envio, **get_usuario_context())
+
+        # Validar email remitente
+        if remitente_email and not validar_email(remitente_email):
+            flash("Email del remitente inválido. Debe contener @ y dominio válido.", "error")
+            return render_template("editar_envio.html", envio=envio, **get_usuario_context())
+
+        # Validar email destinatario
+        if destinatario_email and not validar_email(destinatario_email):
+            flash("Email del destinatario inválido. Debe contener @ y dominio válido.", "error")
             return render_template("editar_envio.html", envio=envio, **get_usuario_context())
 
         cambios = []
