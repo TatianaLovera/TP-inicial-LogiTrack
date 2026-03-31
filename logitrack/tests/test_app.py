@@ -1141,7 +1141,8 @@ def test_edicion_exitosa_supervisor(client):
         "origen": "Origen Editado",
         "destino": "Destino Editado",
         "peso": "15",
-        "dimensiones": "20x20x20"
+        "dimensiones": "20x20x20",
+        "descripcion": "Descripción de prueba editada"  # <--- ¡AGREGAR ESTA LÍNEA!
     }
     
     respuesta = client.post(url_edit, data=datos, follow_redirects=True)
