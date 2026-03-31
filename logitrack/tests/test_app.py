@@ -70,12 +70,14 @@ def test_alta_envio_requiere_ley(client):
     
     # 2. Mandamos todos los campos llenos pero SIN enviar 'acepta_ley'
     datos_formulario = {
-        'remitente_nombre': 'Juan', 'remitente_dni': '111', 
-        'remitente_direccion': 'Dir 1', 'remitente_telefono': '123', 'remitente_email': 'a@a.com',
-        'destinatario_nombre': 'Maria', 'destinatario_dni': '222', 
-        'destinatario_direccion': 'Dir 2', 'destinatario_telefono': '321', 'destinatario_email': 'b@b.com',
-        'origen': 'A', 'destino': 'B', 'peso': '10', 'dimensiones': '1x1x1'
-    }
+            'remitente_nombre': 'Juan', 'remitente_dni': '111',
+            'remitente_direccion': 'Dir 1', 'remitente_telefono': '123456',  # <-- Corregido (6 dígitos)
+            'remitente_email': 'a@a.com',
+            'destinatario_nombre': 'Maria', 'destinatario_dni': '222',
+            'destinatario_direccion': 'Dir 2', 'destinatario_telefono': '654321',  # <-- Corregido (6 dígitos)
+            'destinatario_email': 'b@b.com',
+            'origen': 'A', 'destino': 'B', 'peso': '10', 'dimensiones': '1x1x1'
+        }
     
     respuesta = client.post('/envios/nuevo', data=datos_formulario, follow_redirects=True)
     
