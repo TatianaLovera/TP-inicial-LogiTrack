@@ -9,22 +9,22 @@
     <form method="POST">
         <div class="form-row">
             <div class="form-group"><label>Nombre del Remitente</label><input type="text" name="remitente_nombre" value="{{ envio.remitente.nombre }}" required></div>
-            <div class="form-group"><label>DNI del Remitente</label><input type="text" name="remitente_dni" value="{{ envio.remitente.dni }}" required></div>
+            <div class="form-group"><label>DNI del Remitente</label><input type="text" name="remitente_dni" value="{{ envio.remitente.dni }}" pattern="[0-9]+" title="Solo números" placeholder="Ej: 12345678" required></div>
         </div>
         <div class="form-row">
             <div class="form-group"><label>Dirección del Remitente</label><input type="text" name="remitente_direccion" value="{{ envio.remitente.direccion }}" required></div>
-            <div class="form-group"><label>Teléfono del Remitente</label><input type="tel" name="remitente_telefono" value="{{ envio.remitente.telefono }}" required></div>
+            <div class="form-group"><label>Teléfono del Remitente</label><input type="tel" name="remitente_telefono" value="{{ envio.remitente.telefono }}" pattern="[0-9]+" title="Solo números" required></div>
         </div>
         <div class="form-row">
             <div class="form-group"><label>Email del Remitente</label><input type="email" name="remitente_email" value="{{ envio.remitente.email }}"></div>
         </div>
         <div class="form-row">
             <div class="form-group"><label>Nombre del Destinatario</label><input type="text" name="destinatario_nombre" value="{{ envio.destinatario.nombre }}" required></div>
-            <div class="form-group"><label>DNI del Destinatario</label><input type="text" name="destinatario_dni" value="{{ envio.destinatario.dni }}" required></div>
+            <div class="form-group"><label>DNI del Destinatario</label><input type="text" name="destinatario_dni" value="{{ envio.destinatario.dni }}" pattern="[0-9]+" title="Solo números" placeholder="Ej: 87654321" required></div>
         </div>
         <div class="form-row">
             <div class="form-group"><label>Dirección del Destinatario</label><input type="text" name="destinatario_direccion" value="{{ envio.destinatario.direccion }}" required></div>
-            <div class="form-group"><label>Teléfono del Destinatario</label><input type="tel" name="destinatario_telefono" value="{{ envio.destinatario.telefono }}" required></div>
+            <div class="form-group"><label>Teléfono del Destinatario</label><input type="tel" name="destinatario_telefono" value="{{ envio.destinatario.telefono }}" pattern="[0-9]+" title="Solo números" required></div>
         </div>
         <div class="form-row">
             <div class="form-group"><label>Email del Destinatario</label><input type="email" name="destinatario_email" value="{{ envio.destinatario.email }}"></div>
