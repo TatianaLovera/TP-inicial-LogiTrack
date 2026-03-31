@@ -85,8 +85,10 @@ def validar_dni(dni):
 
 
 def validar_telefono(telefono):
-    """Valida que el teléfono tenga solo números"""
-    return bool(re.match(r"^\d+$", telefono)) and len(telefono) >= 6
+    """Valida que el teléfono tenga solo números (ignorando guiones y espacios)"""
+    # Limpiamos guiones y espacios para la validación
+    telefono_limpio = telefono.replace("-", "").replace(" ", "")
+    return bool(re.match(r"^\d+$", telefono_limpio)) and len(telefono_limpio) >= 6
 
 
 def validar_email(email):
