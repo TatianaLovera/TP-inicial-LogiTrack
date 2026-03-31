@@ -1146,11 +1146,12 @@ def test_edicion_exitosa_supervisor(client):
     }
     
     respuesta = client.post(url_edit, data=datos, follow_redirects=True)
-    
-    # Validamos que salió todo bien
-    contenido = respuesta.data.decode('utf-8')
-    assert "actualizado correctamente" in contenido.lower()
-    assert "Juan Editado" in contenido
+
+    # Validamos que salió todo bien verificando la "base de datos" en memoria
+    # (Esto es mucho más robusto que buscar una frase exacta en el HTML)
+    envio_editado = next(e for e in envios if e['tracking_id'] == id_test)
+    assert envio_editado["remitente"]["nombre"] == "Juan Editado"
+    assert envio_editado["origen"] == "Origen Editado"
 
 def test_edicion_bloqueada_por_tiempo(client):
     """Prueba AC2: Verifica bloqueo de edición después de 5 días"""
