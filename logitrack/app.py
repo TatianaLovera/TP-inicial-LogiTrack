@@ -329,6 +329,10 @@ def nuevo_envio():
         if destinatario_email and not validar_email(destinatario_email):
             flash("Email del destinatario inválido. Debe contener @ y dominio válido.", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
+        
+        if remitente_direccion.lower() == destinatario_direccion.lower():
+            flash("La dirección del remitente y del destinatario no pueden ser la misma.", "error")
+            return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
         if not acepta_ley:
             flash("Debés aceptar términos y política de privacidad para crear el envío.", "error")
@@ -490,6 +494,10 @@ def editar_envio(tracking_id):
         if destinatario_email and not validar_email(destinatario_email):
             flash("Email del destinatario inválido. Debe contener @ y dominio válido.", "error")
             return render_template("editar_envio.html", envio=envio, **get_usuario_context())
+        
+        if remitente_direccion.lower() == destinatario_direccion.lower():
+            flash("La dirección del remitente y del destinatario no pueden ser la misma.", "error")
+            return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
         cambios = []
         def cambia(campo_path, valor_nuevo, valor_anterior):

@@ -157,6 +157,23 @@ def test_alta_envio_faltan_datos_obligatorios(client):
     # El backend debe frenarlo
     assert "Por favor completá todos los campos obligatorios" in texto_html
 
+def test_alta_envio_direcciones_iguales(client):
+    """Prueba que el sistema rechace un envío si origen y destino tienen la misma dirección"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
+    
+    # Usamos tu helper para traer datos válidos
+    datos_malos = obtener_datos_envio_perfecto()
+    
+    # Forzamos el error: Misma dirección, distinta mayúscula/minúscula
+    datos_malos['remitente_direccion'] = 'Av Falsa 123'
+    datos_malos['destinatario_direccion'] = 'av falsa 123' 
+    
+    respuesta = client.post('/envios/nuevo', data=datos_malos, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El sistema debe frenarlo y mostrar el error exacto
+    assert "La dirección del remitente y del destinatario no pueden ser la misma." in texto_html
+
 # ==========================================
 # CASO 10: REGLAS DE NEGOCIO - LOGÍSTICA (US-05 / NFR-05)
 # ==========================================
