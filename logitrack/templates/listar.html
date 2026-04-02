@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Envíos · LogiTrack{% endblock %}
 {% block content %}
+
 <div class="page-header">
     <div>
         <h1 class="page-title">Envíos</h1>
@@ -12,8 +13,21 @@
 <form method="GET" action="{{ url_for('listar_envios') }}" class="search-form" id="search-form">
     <div class="search-bar">
         <input type="text" name="q" id="search-input" value="{{ busqueda }}" placeholder="Buscar por tracking ID, destinatario o remitente…" autocomplete="off" autofocus>
+        
+        <select name="estado">
+            <option value="">Todos los estados</option>
+            <option value="Ingresado" {% if estado == 'Ingresado' %}selected{% endif %}>Ingresado</option>
+            <option value="En tránsito" {% if estado == 'En tránsito' %}selected{% endif %}>En tránsito</option>
+            <option value="En sucursal" {% if estado == 'En sucursal' %}selected{% endif %}>En sucursal</option>
+            <option value="En reparto" {% if estado == 'En reparto' %}selected{% endif %}>En reparto</option>
+            <option value="Visita Fallida" {% if estado == 'Visita Fallida' %}selected{% endif %}>Visita Fallida</option>
+            <option value="Vuelve a remitente" {% if estado == 'Vuelve a remitente' %}selected{% endif %}>Vuelve a remitente</option>
+            <option value="Entregado" {% if estado == 'Entregado' %}selected{% endif %}>Entregado</option>
+            <option value="Cancelado" {% if estado == 'Cancelado' %}selected{% endif %}>Cancelado</option>
+        </select>
+
         <button type="submit" class="btn btn-primary">Buscar</button>
-        {% if busqueda %}<a href="{{ url_for('listar_envios') }}" class="btn btn-secondary">Limpiar</a>{% endif %}
+        {% if busqueda or estado %}<a href="{{ url_for('listar_envios') }}" class="btn btn-secondary">Limpiar</a>{% endif %}
     </div>
     <small class="helper-text">La búsqueda se actualiza en tiempo real mientras escribís.</small>
 </form>
@@ -34,20 +48,20 @@
     <table class="tabla">
         <thead>
             <tr>
-                <th><a href="{{ url_for('listar_envios', q=busqueda, date_from=date_from, date_to=date_to, sort='tracking_id', order='asc' if sort_by == 'tracking_id' and sort_order == 'desc' else 'desc') }}">Tracking ID{% if sort_by == 'tracking_id' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
-                <th><a href="{{ url_for('listar_envios', q=busqueda, date_from=date_from, date_to=date_to, sort='remitente', order='asc' if sort_by == 'remitente' and sort_order == 'desc' else 'desc') }}">Remitente{% if sort_by == 'remitente' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
+                <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='tracking_id', order='asc' if sort_by == 'tracking_id' and sort_order == 'desc' else 'desc') }}">Tracking ID{% if sort_by == 'tracking_id' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
+                <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='remitente', order='asc' if sort_by == 'remitente' and sort_order == 'desc' else 'desc') }}">Remitente{% if sort_by == 'remitente' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 {% if rol == "Supervisor" %}<th>DNI Remitente</th>{% endif %}
-                <th><a href="{{ url_for('listar_envios', q=busqueda, date_from=date_from, date_to=date_to, sort='destinatario', order='asc' if sort_by == 'destinatario' and sort_order == 'desc' else 'desc') }}">Destinatario{% if sort_by == 'destinatario' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
+                <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='destinatario', order='asc' if sort_by == 'destinatario' and sort_order == 'desc' else 'desc') }}">Destinatario{% if sort_by == 'destinatario' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 {% if rol == "Supervisor" %}<th>DNI Destinatario</th>{% endif %}
-                <th><a href="{{ url_for('listar_envios', q=busqueda, date_from=date_from, date_to=date_to, sort='origen', order='asc' if sort_by == 'origen' and sort_order == 'desc' else 'desc') }}">Origen{% if sort_by == 'origen' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
-                <th><a href="{{ url_for('listar_envios', q=busqueda, date_from=date_from, date_to=date_to, sort='destino', order='asc' if sort_by == 'destino' and sort_order == 'desc' else 'desc') }}">Destino{% if sort_by == 'destino' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
+                <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='origen', order='asc' if sort_by == 'origen' and sort_order == 'desc' else 'desc') }}">Origen{% if sort_by == 'origen' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
+                <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='destino', order='asc' if sort_by == 'destino' and sort_order == 'desc' else 'desc') }}">Destino{% if sort_by == 'destino' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 
-                <th><a href="{{ url_for('listar_envios', q=busqueda, date_from=date_from, date_to=date_to, sort='prioridad', order='asc' if sort_by == 'prioridad' and sort_order == 'desc' else 'desc') }}">Prioridad{% if sort_by == 'prioridad' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
+                <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='prioridad', order='asc' if sort_by == 'prioridad' and sort_order == 'desc' else 'desc') }}">Prioridad{% if sort_by == 'prioridad' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
 
-                <th><a href="{{ url_for('listar_envios', q=busqueda, date_from=date_from, date_to=date_to, sort='estado', order='asc' if sort_by == 'estado' and sort_order == 'desc' else 'desc') }}">Estado{% if sort_by == 'estado' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
-                <th><a href="{{ url_for('listar_envios', q=busqueda, date_from=date_from, date_to=date_to, sort='peso', order='asc' if sort_by == 'peso' and sort_order == 'desc' else 'desc') }}">Peso{% if sort_by == 'peso' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
+                <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='estado', order='asc' if sort_by == 'estado' and sort_order == 'desc' else 'desc') }}">Estado{% if sort_by == 'estado' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
+                <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='peso', order='asc' if sort_by == 'peso' and sort_order == 'desc' else 'desc') }}">Peso{% if sort_by == 'peso' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 <th>Envío express</th>
-                <th><a href="{{ url_for('listar_envios', q=busqueda, date_from=date_from, date_to=date_to, sort='fecha_creacion', order='asc' if sort_by == 'fecha_creacion' and sort_order == 'desc' else 'desc') }}">Fecha{% if sort_by == 'fecha_creacion' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
+                <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='fecha_creacion', order='asc' if sort_by == 'fecha_creacion' and sort_order == 'desc' else 'desc') }}">Fecha{% if sort_by == 'fecha_creacion' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 <th>Acciones</th>
             </tr>
         </thead>
@@ -80,15 +94,15 @@
 </div>
 
 <div class="pagination">
-    <a class="btn btn-secondary {% if page <= 1 %}disabled{% endif %}" {% if page > 1 %}href="{{ url_for('listar_envios', q=busqueda, page=page-1) }}"{% endif %}>Anterior</a>
+    <a class="btn btn-secondary {% if page <= 1 %}disabled{% endif %}" {% if page > 1 %}href="{{ url_for('listar_envios', q=busqueda, estado=estado, page=page-1) }}"{% endif %}>Anterior</a>
     <span>Página {{ page }} de {{ total_pages }}</span>
-    <a class="btn btn-secondary {% if page >= total_pages %}disabled{% endif %}" {% if page < total_pages %}href="{{ url_for('listar_envios', q=busqueda, page=page+1) }}"{% endif %}>Siguiente</a>
+    <a class="btn btn-secondary {% if page >= total_pages %}disabled{% endif %}" {% if page < total_pages %}href="{{ url_for('listar_envios', q=busqueda, estado=estado, page=page+1) }}"{% endif %}>Siguiente</a>
 </div>
 {% else %}
 <div class="empty-state">
     <div class="empty-icon">🔍</div>
-    {% if busqueda %}
-        <p>No se encontraron resultados para "<strong>{{ busqueda }}</strong>".</p>
+    {% if busqueda or estado %}
+        <p>No se encontraron resultados para "<strong>{{ busqueda }}</strong>" {% if estado %}en estado "<strong>{{ estado }}</strong>"{% endif %}.</p>
         <a href="{{ url_for('listar_envios') }}" class="btn btn-secondary">Ver todos</a>
     {% else %}
         <p>No hay envíos registrados aún.</p>

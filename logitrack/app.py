@@ -221,6 +221,7 @@ def panel():
 @role_required("Supervisor", "Operador")
 def listar_envios():
     busqueda = request.args.get("q", "").strip().lower()
+    estado_filtro = request.args.get("estado", "").strip()  # <-- NUEVO: Capturamos el estado
     date_from = request.args.get("date_from", "").strip()
     date_to = request.args.get("date_to", "").strip()
     sort_by = request.args.get("sort", "fecha_creacion")
@@ -242,6 +243,13 @@ def listar_envios():
             if busqueda in e["tracking_id"].lower()
             or busqueda in e["destinatario"]["nombre"].lower()
             or busqueda in e["remitente"]["nombre"].lower()
+        ]
+        
+    # Apply status filter (NUEVO)
+    if estado_filtro:
+        resultado = [
+            e for e in resultado 
+            if e["estado"].lower() == estado_filtro.lower()
         ]
     
     # Apply date range filter
@@ -298,6 +306,7 @@ def listar_envios():
         "listar.html",
         envios=paginados,
         busqueda=busqueda,
+        estado=estado_filtro,  # <-- NUEVO: Pasamos el estado a la vista
         date_from=date_from,
         date_to=date_to,
         sort_by=sort_by,

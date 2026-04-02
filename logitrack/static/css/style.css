@@ -720,6 +720,30 @@ body.sidebar-open .main-content {
 .search-bar input:focus { border-color: var(--accent); }
 .search-bar input::placeholder { color: var(--text-dim); }
 
+/* 👇 ESTILOS NUEVOS PARA EL SELECTOR DE ESTADO 👇 */
+.search-bar select {
+    background-color: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: .6rem 1rem;
+    outline: none;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: .875rem;
+    transition: border-color .15s;
+}
+
+.search-bar select:focus { 
+    border-color: var(--accent); 
+}
+
+.search-bar select option {
+    background-color: var(--bg-card);
+    color: var(--text);
+}
+/* 👆 FIN ESTILOS NUEVOS 👆 */
+
 /* ── FORMULARIOS ── */
 .form-card {
     background: var(--bg-card);

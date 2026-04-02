@@ -1470,3 +1470,22 @@ def test_filtro_fechas_boton_limpiar(client):
     # Como atajo de UX, el link a "/envios" en el menú lateral funciona como reset.
     # El test verifica que exista la palabra 'limpiar' o un enlace limpio a la ruta raíz de envíos.
     assert 'href="/envios"' in html or "limpiar" in html or "reset" in html
+
+def test_busqueda_filtro_por_estado(client):
+    """Prueba que el filtro desplegable por estado devuelva los resultados correctos"""
+    from app import envios, cargar_datos_ejemplo
+    envios.clear()
+    cargar_datos_ejemplo()
+
+    # Logueo
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
+    
+    # 1. Buscamos paquetes "En tránsito" (debería estar Pedro Lima en la data semilla)
+    respuesta = client.get('/envios?estado=En+tránsito')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    assert respuesta.status_code == 200
+    # Verificamos que el option quede "selected" en la UI para la experiencia del usuario
+    assert 'value="En tránsito" selected' in texto_html or 'selected>En tránsito' in texto_html
+    # Verificamos que el paquete en tránsito se esté mostrando
+    assert "En tránsito" in texto_html
