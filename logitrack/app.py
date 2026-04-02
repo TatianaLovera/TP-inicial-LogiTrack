@@ -6,6 +6,7 @@ import joblib
 import random
 import re
 from math import ceil
+import pandas as pd
 
 app = Flask(__name__)
 app.secret_key = "logitrack-secret-2024"
@@ -80,8 +81,23 @@ def puede_editar_envio(envio):
 
 
 def validar_dni(dni):
-    """Valida que el DNI tenga solo números"""
-    return bool(re.match(r"^\d+$", dni))
+    """Valida que el DNI pertenezca a rangos válidos, excluyendo el salto administrativo."""
+    if not bool(re.match(r"^\d+$", dni)):
+        return False
+        
+    dni_num = int(dni)
+    
+    # Argentinos nativos (antes del salto administrativo)
+    es_nativo_1 = 1500000 <= dni_num <= 59999999
+    
+    # Argentinos nativos (después del salto administrativo)
+    es_nativo_2 = 70000000 <= dni_num <= 72000000
+    
+    # Extranjeros residentes
+    es_extranjero = 92000000 <= dni_num <= 96000000
+    
+    # Si es 65.000.000, las tres variables darán False, rechazando el DNI.
+    return es_nativo_1 or es_nativo_2 or es_extranjero
 
 
 def validar_telefono(telefono):
@@ -302,12 +318,17 @@ def nuevo_envio():
 
         # Validar DNI remitente
         if not validar_dni(remitente_dni):
-            flash("DNI del remitente debe contener solo números.", "error")
+            flash("DNI del remitente inválido (debe ser un número real entre los rangos vigentes).", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
         # Validar DNI destinatario
         if not validar_dni(destinatario_dni):
-            flash("DNI del destinatario debe contener solo números.", "error")
+            flash("DNI del destinatario inválido (debe ser un número real entre los rangos vigentes).", "error")
+            return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
+
+        #  VALIDACIÓN: DNIs iguales 
+        if remitente_dni == destinatario_dni:
+            flash("El DNI del remitente y del destinatario no pueden ser el mismo.", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
         # Validar teléfono remitente
@@ -348,7 +369,11 @@ def nuevo_envio():
         prioridad_calc = "Normal" # Valor por defecto por si la IA falla
         if modelo_ia:
             try:
-                pred = modelo_ia.predict([[distancia_simulada, peso_float, es_express_ia]])
+                datos_para_ia = pd.DataFrame(
+                    [[distancia_simulada, peso_float, es_express_ia]], 
+                    columns=['distancia_km', 'peso_kg', 'es_express']
+                )
+                pred = modelo_ia.predict(datos_para_ia)
                 prioridad_calc = pred[0]
             except Exception as e:
                 print(f"Error al calcular IA: {e}")
@@ -467,13 +492,19 @@ def editar_envio(tracking_id):
 
         # Validar DNI remitente
         if not validar_dni(remitente_dni):
-            flash("DNI del remitente debe contener solo números.", "error")
+            flash("DNI del remitente inválido (debe ser un número real entre los rangos vigentes).", "error")
             return render_template("editar_envio.html", envio=envio, **get_usuario_context())
 
         # Validar DNI destinatario
         if not validar_dni(destinatario_dni):
-            flash("DNI del destinatario debe contener solo números.", "error")
+            flash("DNI del destinatario inválido (debe ser un número real entre los rangos vigentes).", "error")
             return render_template("editar_envio.html", envio=envio, **get_usuario_context())
+
+        # VALIDACIÓN: DNIs iguales 
+        if remitente_dni == destinatario_dni:
+            flash("El DNI del remitente y del destinatario no pueden ser el mismo.", "error")
+            return render_template("editar_envio.html", envio=envio, **get_usuario_context())
+    
 
         # Validar teléfono remitente
         if not validar_telefono(remitente_telefono):
@@ -596,7 +627,6 @@ def cambiar_estado(tracking_id):
     
     if dni_retiro:
         nota = f"Retirado por DNI: {dni_retiro} - {nota}"
-    # FIN DE LA NUEVA VALIDACIÓN
 
     if transportista:
         envio["transportista"] = transportista
@@ -768,7 +798,11 @@ def api_predecir_prioridad():
         express = int(datos.get('es_express', 0))
 
         # Le pasamos los datos al cerebro (espera una lista de listas)
-        prediccion = modelo_ia.predict([[distancia, peso, express]])
+        datos_para_ia = pd.DataFrame(
+            [[distancia, peso, express]], 
+            columns=['distancia_km', 'peso_kg', 'es_express']
+        )
+        prediccion = modelo_ia.predict(datos_para_ia)
         prioridad_calculada = prediccion[0]
 
         return jsonify({
