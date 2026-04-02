@@ -19,7 +19,11 @@
             </div>
             <div class="form-row">
                 <div class="form-group"><label>Dirección del Remitente <span class="required">*</span></label><input type="text" name="remitente_direccion" value="{{ form.get('remitente_direccion','') }}" placeholder="Calle, número, ciudad, provincia" required></div>
-                <div class="form-group"><label>Teléfono del Remitente <span class="required">*</span></label><input type="tel" name="remitente_telefono" value="{{ form.get('remitente_telefono','') }}" pattern="[0-9]+" title="Solo números" placeholder="Ej: 1123456789" required></div>
+                <div class="form-group">
+                    <label>Teléfono del Remitente <span class="required">*</span></label>
+                    <input type="tel" name="remitente_telefono" value="{{ form.get('remitente_telefono','') }}" pattern="[0-9]+" title="Debe contener 10 dígitos (Código de área + Número)" placeholder="Ej: 1123456789" required>
+                    <small style="display: block; margin-top: 4px; font-size: 0.85em; opacity: 0.8;">Ej: 10 dígitos sin 0 ni 15.</small>
+                </div>
             </div>
             <div class="form-row">
                 <div class="form-group"><label>Email del Remitente</label><input type="email" name="remitente_email" value="{{ form.get('remitente_email','') }}" placeholder="remitente@email.com"></div>
@@ -30,7 +34,11 @@
             </div>
             <div class="form-row">
                 <div class="form-group"><label>Dirección del Destinatario <span class="required">*</span></label><input type="text" name="destinatario_direccion" value="{{ form.get('destinatario_direccion','') }}" placeholder="Calle, número, ciudad, provincia" required></div>
-                <div class="form-group"><label>Teléfono del Destinatario <span class="required">*</span></label><input type="tel" name="destinatario_telefono" value="{{ form.get('destinatario_telefono','') }}" pattern="[0-9]+" title="Solo números" placeholder="Ej: 3519876543" required></div>
+                <div class="form-group">
+                    <label>Teléfono del Destinatario <span class="required">*</span></label>
+                    <input type="tel" name="destinatario_telefono" value="{{ form.get('destinatario_telefono','') }}" pattern="[0-9]+" title="Debe contener 10 dígitos sin 0 ni 15" placeholder="Ej: 3519876543" required>
+                    <small style="display: block; margin-top: 4px; font-size: 0.85em; opacity: 0.8;">Ej: 10 dígitos sin 0 ni 15.</small>
+                </div>
             </div>
             <div class="form-row">
                 <div class="form-group"><label>Email del Destinatario</label><input type="email" name="destinatario_email" value="{{ form.get('destinatario_email','') }}" placeholder="destinatario@email.com"></div>

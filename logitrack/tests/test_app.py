@@ -73,24 +73,21 @@ def test_operador_no_accede_panel(client):
 # CASO 5: VALIDACIÓN LEGAL - LEY 25.326 (US-01 / NFR-04)
 # ==========================================
 def test_alta_envio_requiere_ley(client):
-    """Prueba que no se pueda crear envío sin marcar 'acepta_ley' usando DNIs válidos"""
+    """Prueba que no se pueda crear envío sin marcar 'acepta_ley' usando datos válidos"""
     client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
     
-    # Usamos DNIs que pasen la nueva validación (> 1.5M)
     datos_formulario = {
             'remitente_nombre': 'Juan', 'remitente_dni': '20111222',
-            'remitente_direccion': 'Dir 1', 'remitente_telefono': '12345678',
+            'remitente_direccion': 'Dir 1', 'remitente_telefono': '1123456789', # <-- 10 DÍGITOS
             'remitente_email': 'a@a.com',
             'destinatario_nombre': 'Maria', 'destinatario_dni': '30111222',
-            'destinatario_direccion': 'Dir 2', 'destinatario_telefono': '65432100',
+            'destinatario_direccion': 'Dir 2', 'destinatario_telefono': '1165432100', # <-- 10 DÍGITOS
             'destinatario_email': 'b@b.com',
             'origen': 'A', 'destino': 'B', 'peso': '10', 'dimensiones': '1x1x1'
         }
     
     respuesta = client.post('/envios/nuevo', data=datos_formulario, follow_redirects=True)
     texto_html = respuesta.data.decode('utf-8')
-    
-    
     assert "Debés aceptar términos y política de privacidad" in texto_html
 
 # ==========================================
@@ -289,9 +286,11 @@ def obtener_datos_envio_perfecto():
     """Devuelve un diccionario con datos válidos para reutilizar en los tests de Alta"""
     return {
         'remitente_nombre': 'Carlos Test', 'remitente_dni': '12345678', 
-        'remitente_direccion': 'Calle Falsa 123', 'remitente_telefono': '11223344', 'remitente_email': 'c@c.com',
+        'remitente_direccion': 'Calle Falsa 123', 'remitente_telefono': '1122334455', # <-- 10 DÍGITOS
+        'remitente_email': 'c@c.com',
         'destinatario_nombre': 'Ana Test', 'destinatario_dni': '93000000', 
-        'destinatario_direccion': 'Av Siempre 742', 'destinatario_telefono': '55443322', 'destinatario_email': 'a@a.com',
+        'destinatario_direccion': 'Av Siempre 742', 'destinatario_telefono': '1155443322', # <-- 10 DÍGITOS
+        'destinatario_email': 'a@a.com',
         'origen': 'CABA', 'destino': 'Rosario', 'peso': '2.5', 'dimensiones': '10x10x10',
         'acepta_ley': 'on'
     }
@@ -655,8 +654,7 @@ def test_retiro_sucursal_requiere_dni(client):
 # ==========================================
 
 def test_editar_envio_registra_auditoria_valores(client):
-    """Prueba que la edición guarde auditoría con el rastro de cambios (Corregido con DNIs válidos)"""
-    # 1. Entrar como supervisor
+    """Prueba que la edición guarde auditoría con el rastro de cambios (Corregido)"""
     client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
     
     from app import envios, audit_logs
@@ -665,21 +663,18 @@ def test_editar_envio_registra_auditoria_valores(client):
     nombre_viejo = envio["remitente"]["nombre"]
     nombre_nuevo = "Juan Editado Test"
     
-    # Guardamos cuántos logs había antes de la acción
     logs_antes = len(audit_logs)
     
-    # 2. Ejecutar la edición 
-    # Usamos DNIs que pasen la nueva validación (> 1.5M) para que el envío se guarde
     datos_edicion = {
         'remitente_nombre': nombre_nuevo,
-        'remitente_dni': '25111222', # DNI Válido para que no rebote
+        'remitente_dni': '25111222', 
         'remitente_direccion': 'Nueva Direccion 123',
-        'remitente_telefono': '11445566',
+        'remitente_telefono': '1144556677', # <-- 10 DÍGITOS
         'remitente_email': 'test@test.com',
         'destinatario_nombre': 'Destinatario Test',
-        'destinatario_dni': '35111222', # DNI Válido para que no rebote
+        'destinatario_dni': '35111222', 
         'destinatario_direccion': 'Otra Direccion 456',
-        'destinatario_telefono': '11665544',
+        'destinatario_telefono': '1166554433', # <-- 10 DÍGITOS
         'destinatario_email': 'dest@test.com',
         'origen': 'Origen', 'destino': 'Destino',
         'peso': '10', 'dimensiones': '1x1', 'descripcion': 'Edit'
@@ -687,16 +682,13 @@ def test_editar_envio_registra_auditoria_valores(client):
     
     client.post(f'/envios/{tracking}/editar', data=datos_edicion, follow_redirects=True)
     
-    # 3. Verificación de los Logs
     nuevos_logs = audit_logs[logs_antes:]
     log_edicion = next((log for log in nuevos_logs if log["accion"] == "Edición"), None)
     
-    # LOS 4 ASSERTS ORIGINALES:
     assert log_edicion is not None
-    # Verificamos la regla de oro: Que quede guardado lo que era y lo que es ahora
     assert nombre_viejo in log_edicion["detalle"]
     assert nombre_nuevo in log_edicion["detalle"]
-    assert "→" in log_edicion["detalle"] # Símbolo que programaste en app.py
+    assert "→" in log_edicion["detalle"]
 
 def test_auditoria_pantalla_acceso_supervisor(client):
     """Prueba AC3: El Supervisor puede acceder a la pantalla y ver la tabla"""
@@ -740,25 +732,26 @@ def test_auditoria_inmutabilidad_bloqueo_metodos(client):
 # ==========================================
 
 def test_historial_estado_inicial_tras_alta(client):
-    """Prueba AC4: Un envío recién creado muestra inmediatamente su evento original de creación"""
+    """Prueba AC4: Un envío recién creado muestra inmediatamente su evento original"""
     client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
     
-    # Preparamos datos mínimos obligatorios para crear un envío rápido
     datos_minimos = {
-        'remitente_nombre': 'A', 'remitente_dni': '1', 'remitente_direccion': 'A', 'remitente_telefono': '1', 'remitente_email': 'a@a.com',
-        'destinatario_nombre': 'B', 'destinatario_dni': '2', 'destinatario_direccion': 'B', 'destinatario_telefono': '2', 'destinatario_email': 'b@b.com',
+        'remitente_nombre': 'A', 'remitente_dni': '25111222', 'remitente_direccion': 'A', 
+        'remitente_telefono': '1111111111', # <-- 10 DÍGITOS
+        'remitente_email': 'a@a.com',
+        'destinatario_nombre': 'B', 'destinatario_dni': '35111222', 'destinatario_direccion': 'B', 
+        'destinatario_telefono': '1122222222', # <-- 10 DÍGITOS
+        'destinatario_email': 'b@b.com',
         'origen': 'C', 'destino': 'D', 'peso': '1', 'dimensiones': '1x1', 'acepta_ley': 'on'
     }
     client.post('/envios/nuevo', data=datos_minimos, follow_redirects=True)
     
-    # Vamos al detalle del último envío creado
     from app import envios
     ultimo_tracking = envios[-1]["tracking_id"]
     
     respuesta = client.get(f'/envios/{ultimo_tracking}')
     texto_html = respuesta.data.decode('utf-8')
     
-    # Verificamos que la nota dura que pusiste en app.py aparezca en el HTML
     assert "Envío creado en el sistema" in texto_html
     assert "Ingresado" in texto_html
 

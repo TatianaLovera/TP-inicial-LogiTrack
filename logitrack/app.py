@@ -101,10 +101,32 @@ def validar_dni(dni):
 
 
 def validar_telefono(telefono):
-    """Valida que el teléfono tenga solo números (ignorando guiones y espacios)"""
-    # Limpiamos guiones y espacios para la validación
-    telefono_limpio = telefono.replace("-", "").replace(" ", "")
-    return bool(re.match(r"^\d+$", telefono_limpio)) and len(telefono_limpio) >= 6
+    """Valida que sea un número de teléfono válido de Argentina."""
+    # 1. Quitamos espacios, guiones, paréntesis y el signo +
+    tel = re.sub(r'[\s\-\(\)\+]', '', telefono)
+    
+    # 2. Si quedaron letras o está vacío, es inválido
+    if not tel.isdigit():
+        return False
+        
+    # 3. Limpiamos los prefijos clásicos de Argentina
+    if tel.startswith('549'): # Código país + prefijo celular internacional
+        tel = tel[3:]
+    elif tel.startswith('54'): # Código país
+        tel = tel[2:]
+        
+    if tel.startswith('0'): # Prefijo interurbano
+        tel = tel[1:]
+        
+    # 4. En Argentina, área + número = 10 dígitos exactos (ej: 1123456789)
+    if len(tel) == 10:
+        return True
+        
+    # 5. Si la persona agregó el "15" (quedan 12 dígitos), validamos que esté ahí
+    if len(tel) == 12 and ('15' in tel[2:6]): 
+        return True
+        
+    return False
 
 
 def validar_email(email):
@@ -333,12 +355,12 @@ def nuevo_envio():
 
         # Validar teléfono remitente
         if not validar_telefono(remitente_telefono):
-            flash("Teléfono del remitente debe contener solo números.", "error")
+            flash("El teléfono del remitente no es válido para Argentina.", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
         # Validar teléfono destinatario
         if not validar_telefono(destinatario_telefono):
-            flash("Teléfono del destinatario debe contener solo números.", "error")
+            flash("El teléfono del destinatario no es válido para Argentina.", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
         # Validar email remitente
@@ -508,12 +530,12 @@ def editar_envio(tracking_id):
 
         # Validar teléfono remitente
         if not validar_telefono(remitente_telefono):
-            flash("Teléfono del remitente debe contener solo números.", "error")
+            flash("El teléfono del remitente no es válido para Argentina.", "error")
             return render_template("editar_envio.html", envio=envio, **get_usuario_context())
 
         # Validar teléfono destinatario
         if not validar_telefono(destinatario_telefono):
-            flash("Teléfono del destinatario debe contener solo números.", "error")
+            flash("El teléfono del destinatario no es válido para Argentina.", "error")
             return render_template("editar_envio.html", envio=envio, **get_usuario_context())
 
         # Validar email remitente
