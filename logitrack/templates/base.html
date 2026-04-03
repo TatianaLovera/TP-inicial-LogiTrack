@@ -67,5 +67,39 @@
     {% endif %}
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% block scripts %}{% endblock %}
+
+    {% if session.usuario %}
+    <script>
+        function iniciarControlInactividad() {
+            let temporizador;
+            // 30 minutos = 30 * 60 * 1000 milisegundos = 1800000
+            const limiteInactividad = 30 * 60 * 1000;
+
+            function cerrarSesion() {
+                // Limpia el LocalStorage por prolijidad
+                localStorage.removeItem('ultima_actividad');
+                // Redirige al logout para limpiar la sesión en el backend
+                window.location.href = "{{ url_for('logout') }}";
+            }
+
+            function resetearTemporizador() {
+                clearTimeout(temporizador);
+                // Cumplimos con la nota técnica: guardamos el timestamp en LocalStorage
+                localStorage.setItem('ultima_actividad', Date.now());
+                temporizador = setTimeout(cerrarSesion, limiteInactividad);
+            }
+
+            // Eventos del usuario que reinician el contador
+            window.onload = resetearTemporizador;
+            document.onmousemove = resetearTemporizador;
+            document.onkeypress = resetearTemporizador;
+            document.onclick = resetearTemporizador;
+            document.onscroll = resetearTemporizador;
+        }
+
+        // Iniciamos el script solo si el usuario está logueado
+        iniciarControlInactividad();
+    </script>
+    {% endif %}
 </body>
 </html>

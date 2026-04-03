@@ -10,6 +10,7 @@ import pandas as pd
 
 app = Flask(__name__)
 app.secret_key = "logitrack-secret-2024"
+app.permanent_session_lifetime = datetime.timedelta(minutes=30)
 
 envios = []
 audit_logs = []
@@ -187,6 +188,7 @@ def login():
         usuario = request.form.get("usuario", "").strip()
         password = request.form.get("password", "").strip()
         if usuario in USUARIOS and USUARIOS[usuario]["password"] == password:
+            session.permanent = True  # <-- NUEVO: Activa el temporizador de inactividad
             session["usuario"] = usuario
             session["rol"] = USUARIOS[usuario]["rol"]
             flash(f"Bienvenido, {usuario} ({USUARIOS[usuario]['rol']})", "success")
@@ -601,6 +603,58 @@ def editar_envio(tracking_id):
 
     return render_template("editar_envio.html", envio=envio, **get_usuario_context())
 
+@app.route("/envios/script-anonimizar", methods=["POST"])
+@role_required("Supervisor")
+def script_anonimizar():
+    usuario_actual, _ = get_usuario()
+    hoy = ahora()
+    modificados = 0
+    
+    # Definimos los estados finales según la política de la empresa
+    ESTADOS_FINALES = ["Cancelado", "Entregado", "Entregado a remitente"]
+
+    for envio in envios:
+        # Solo procesamos si el estado actual es uno de los finales
+        if envio["estado"] in ESTADOS_FINALES:
+            
+            # Buscamos el último evento en el historial que coincida con un estado final
+            evento_cierre = next((h for h in reversed(envio["historial"]) if h["estado"] in ESTADOS_FINALES), None)
+            
+            if evento_cierre:
+                fecha_cierre = datetime.datetime.strptime(evento_cierre["fecha"], "%d/%m/%Y %H:%M")
+                
+                # Si pasaron más de 30 días desde que se cerró el ciclo
+                if (hoy - fecha_cierre).days > 30:
+                    # 1. Anonimización de datos de contacto
+                    envio["remitente"].update({
+                        "nombre": "ANONIMIZADO",
+                        "dni": "ANONIMIZADO",
+                        "telefono": "ANONIMIZADO",
+                        "email": "ANONIMIZADO"
+                    })
+                    
+                    envio["destinatario"].update({
+                        "nombre": "ANONIMIZADO",
+                        "dni": "ANONIMIZADO",
+                        "telefono": "ANONIMIZADO",
+                        "email": "ANONIMIZADO"
+                    })
+
+                    # 2. Ofuscación de dirección exacta (conservamos localidad para la IA)
+                    envio["remitente"]["direccion"] = f"Zona/Localidad: {envio['origen']}"
+                    envio["destinatario"]["direccion"] = f"Zona/Localidad: {envio['destino']}"
+
+                    # 3. Auditoría del proceso
+                    registrar_auditoria(envio["tracking_id"], "Edición", f"Anonimización automática (Estado: {envio['estado']} > 30 días).", "sistema")
+                    modificados += 1
+
+    if modificados > 0:
+        flash(f"Éxito: Se anonimizaron {modificados} envíos en estado final con antigüedad mayor a 30 días.", "success")
+    else:
+        flash("No se encontraron envíos finalizados que requieran anonimización hoy.", "info")
+        
+    return redirect(url_for("listar_envios"))
+
 
 @app.route("/envios/<tracking_id>/cambiar-estado", methods=["POST"])
 def cambiar_estado(tracking_id):
@@ -832,7 +886,13 @@ def cargar_datos_ejemplo():
          "Neuquén", "Bariloche", "Accesorios", "1.8", "25x20x12 cm", "Ingresado", None, False),
     ]
     for i, (rem_nom, rem_dni, rem_dir, rem_tel, rem_email, dest_nom, dest_dni, dest_dir, dest_tel, dest_email, orig, dst, desc, peso, dim, estado, transportista, envio_express) in enumerate(ejemplos):
-        fecha_dt = ahora() - datetime.timedelta(days=min(i, 6), hours=i)
+        
+        # Simulamos envíos antiguos para probar la Ley 25.326:
+        # i=2 (Entregado), i=4 (Cancelado), i=7 (Entregado a remitente)
+        if i in [2, 4, 7]:
+            fecha_dt = ahora() - datetime.timedelta(days=35)
+        else:
+            fecha_dt = ahora() - datetime.timedelta(days=min(i, 6), hours=i)
         fecha = fecha_dt.strftime("%d/%m/%Y %H:%M")
         tracking = generar_tracking_id()
         nuevo = {

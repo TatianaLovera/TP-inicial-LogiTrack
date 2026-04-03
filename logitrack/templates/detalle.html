@@ -24,6 +24,7 @@
             <div class="detail-row"><dt>Peso</dt><dd>{{ envio.peso }} kg</dd></div>
             <div class="detail-row"><dt>Dimensiones</dt><dd>{{ envio.dimensiones }}</dd></div>
             <div class="detail-row"><dt>Envío express</dt><dd>{{ 'Sí' if envio.envio_express else 'No' }}</dd></div>
+            <div class="detail-row"><dt>Prioridad (IA)</dt><dd><span class="badge badge-{{ envio.prioridad | lower | default('normal') }}" style="margin-left: -0.55rem;">{{ envio.prioridad | default('Normal') }}</span></dd></div>
             {% if rol != "Transportista" %}<div class="detail-row"><dt>Descripción</dt><dd>{{ envio.descripcion }}</dd></div>{% endif %}
             <div class="detail-row"><dt>Fecha de creación</dt><dd>{{ envio.fecha_creacion }}</dd></div>
             {% if rol != "Transportista" %}<div class="detail-row"><dt>Transportista</dt><dd>{{ envio.transportista or 'Sin asignar' }}</dd></div>{% endif %}

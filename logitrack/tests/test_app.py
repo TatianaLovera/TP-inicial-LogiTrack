@@ -1555,3 +1555,95 @@ def test_cambio_estado_visita_fallida_con_motivo(client):
     historial_reciente = envio["historial"][-1]["nota"]
     assert "Motivo: Domicilio cerrado / Nadie responde" in historial_reciente
     assert "Toqué timbre 3 veces" in historial_reciente
+
+def test_script_anonimizar_ley_25326(client):
+    """Prueba que el script de anonimización borre datos de envíos finalizados con >30 días"""
+    from app import envios, ahora
+    import datetime
+    
+    envios.clear()
+    
+    hoy = ahora()
+    hace_40_dias = (hoy - datetime.timedelta(days=40)).strftime("%d/%m/%Y %H:%M")
+    hace_10_dias = (hoy - datetime.timedelta(days=10)).strftime("%d/%m/%Y %H:%M")
+    
+    # 1. Envío Entregado hace más de 30 días (DEBE ANONIMIZARSE)
+    envios.append({
+            "tracking_id": "TEST-VIEJO-1",
+            "estado": "Entregado",
+            "origen": "CABA",
+            "destino": "Córdoba",
+            "fecha_creacion": hace_40_dias,  # <-- AGREGADO
+            "remitente": {"nombre": "Juan Perez", "dni": "111", "direccion": "Calle 1", "telefono": "111", "email": "j@j.com"},
+            "destinatario": {"nombre": "Maria Gomez", "dni": "222", "direccion": "Calle 2", "telefono": "222", "email": "m@m.com"},
+            "historial": [{"estado": "Entregado", "fecha": hace_40_dias}]
+        })
+
+    # 2. Envío Cancelado hace más de 30 días (DEBE ANONIMIZARSE)
+    envios.append({
+            "tracking_id": "TEST-VIEJO-2",
+            "estado": "Cancelado",
+            "origen": "Pilar",
+            "destino": "Tigre",
+            "fecha_creacion": hace_40_dias,  # <-- AGREGADO
+            "remitente": {"nombre": "Carlos Rey", "dni": "333", "direccion": "Calle 3", "telefono": "333", "email": "c@c.com"},
+            "destinatario": {"nombre": "Ana Paz", "dni": "444", "direccion": "Calle 4", "telefono": "444", "email": "a@a.com"},
+            "historial": [{"estado": "Cancelado", "fecha": hace_40_dias}]
+        })
+
+    # 3. Envío Entregado hace MENOS de 30 días (NO DEBE ANONIMIZARSE)
+    envios.append({
+            "tracking_id": "TEST-NUEVO-1",
+            "estado": "Entregado",
+            "origen": "Morón",
+            "destino": "Luján",
+            "fecha_creacion": hace_10_dias,  # <-- AGREGADO
+            "remitente": {"nombre": "Luis Silva", "dni": "555", "direccion": "Calle 5", "telefono": "555", "email": "l@l.com"},
+            "destinatario": {"nombre": "Eva Luna", "dni": "666", "direccion": "Calle 6", "telefono": "666", "email": "e@e.com"},
+            "historial": [{"estado": "Entregado", "fecha": hace_10_dias}]
+        })
+
+    # Logueo como supervisor para tener permisos
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Ejecutar script (botón)
+    respuesta = client.post('/envios/script-anonimizar', follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificaciones de los mensajes en pantalla
+    assert "Se anonimizaron 2 envíos" in texto_html
+    
+    # Validar el primer envío (DEBE estar anonimizado y con dirección ofuscada)
+    assert envios[0]["remitente"]["nombre"] == "ANONIMIZADO"
+    assert envios[0]["destinatario"]["dni"] == "ANONIMIZADO"
+    assert envios[0]["remitente"]["direccion"] == "Zona/Localidad: CABA"
+    
+    # Validar el segundo envío (DEBE estar anonimizado)
+    assert envios[1]["remitente"]["nombre"] == "ANONIMIZADO"
+    
+    # Validar el tercer envío (NO DEBE haber sido tocado por el script)
+    assert envios[2]["remitente"]["nombre"] == "Luis Silva"
+    assert envios[2]["destinatario"]["dni"] == "666"
+    assert envios[2]["remitente"]["direccion"] == "Calle 5"
+
+def test_inactividad_sesion_us_28(client):
+    """Prueba la configuración de expiración de sesión por inactividad y persistencia (US-28)"""
+    from app import app
+    import datetime
+
+    # 1. Verificar configuración global del backend (30 min)
+    assert app.permanent_session_lifetime == datetime.timedelta(minutes=30)
+
+    # Hacemos login exitoso (ya no usamos el 'with client' acá afuera)
+    respuesta = client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # 2. Verificar que la sesión activa la persistencia
+    # Usamos session_transaction() para poder leer el estado de la sesión de forma segura
+    with client.session_transaction() as session_activa:
+        assert session_activa.permanent is True
+        assert session_activa.get("usuario") == "supervisor"
+
+    # 3. Verificar que el frontend inyecta el script vigilante
+    texto_html = respuesta.data.decode('utf-8')
+    assert "iniciarControlInactividad()" in texto_html
+    assert "30 * 60 * 1000" in texto_html
