@@ -26,6 +26,7 @@ USUARIOS = {
     "operador": {"password": "op123", "rol": "Operador"},
     "supervisor": {"password": "sup123", "rol": "Supervisor"},
     "transportista": {"password": "tra123", "rol": "Transportista"},
+    "transportista2": {"password": "tra123", "rol": "Transportista"},
 }
 
 ESTADOS = [
@@ -474,10 +475,14 @@ def detalle_envio(tracking_id):
     if rol == "Supervisor":
         registrar_auditoria(tracking_id, "Consulta", "Acceso al detalle completo del envío.", usuario)
 
+    # 👇 NUEVO: Extraemos la lista dinámica de transportistas 👇
+    lista_transportistas = [u for u, datos in USUARIOS.items() if datos["rol"] == "Transportista"]
+
     return render_template(
         "detalle.html",
         envio=envio,
         estados=ESTADOS,
+        transportistas_disponibles=lista_transportistas, # <-- Pasamos la lista a la vista
         puede_editar=puede_editar_envio(envio),
         **get_usuario_context(),
     )
@@ -610,23 +615,53 @@ def cambiar_estado(tracking_id):
     nuevo_estado = request.form.get("nuevo_estado", "").strip()
     nota = request.form.get("nota", "").strip() or "Sin nota adicional."
     transportista = request.form.get("transportista", "").strip() or None
-    
-    # 1. Agregamos la captura del DNI desde el formulario (si existe)
     dni_retiro = request.form.get("dni_retiro", "").strip() 
     
+    # 👇 NUEVOS CAMPOS DE REASIGNACIÓN 👇
+    nuevo_transportista = request.form.get("nuevo_transportista", "").strip()
+    motivo_reasignacion = request.form.get("motivo_reasignacion", "").strip()
+    
     usuario, rol = get_usuario()
+    estado_actual = envio["estado"]
 
-    # Check if current state is final
     estados_finales = ["Cancelado", "Entregado", "Entregado a remitente"]
-    if envio["estado"] in estados_finales:
+    if estado_actual in estados_finales:
         flash("Este envío está en un estado final y no puede ser modificado.", "error")
+        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+
+    # =========================================================
+    # 👇 INTERCEPTOR DE REASIGNACIÓN PURA 👇
+    # Si no cambiaron el estado, pero eligieron otro transportista
+    # =========================================================
+    if not nuevo_estado and nuevo_transportista and estado_actual == "En tránsito" and rol == "Supervisor":
+        if not motivo_reasignacion:
+            flash("Debe seleccionar un motivo para la reasignación.", "error")
+            return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+        
+        transportista_anterior = envio.get("transportista", "Ninguno")
+        envio["transportista"] = nuevo_transportista
+        nota_final = f"Motivo: {motivo_reasignacion}. Obs: {nota}"
+        
+        envio["historial"].append({
+            "estado": "En tránsito",
+            "fecha": ahora_str(),
+            "usuario": usuario,
+            "nota": f"Reasignado a {nuevo_transportista}. {nota_final}",
+        })
+        registrar_auditoria(tracking_id, "Reasignación", f"Transportista: '{transportista_anterior}' → '{nuevo_transportista}'. {nota_final}", usuario)
+        flash("Transportista reasignado correctamente.", "success")
+        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+    # =========================================================
+
+    # Si no es reasignación, validamos que haya un estado como siempre
+    if not nuevo_estado:
+        flash("Debe seleccionar un nuevo estado.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
     if nuevo_estado not in ESTADOS:
         flash("Estado inválido.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
-    estado_actual = envio["estado"]
     permitido = False
 
     if rol == "Supervisor":
@@ -651,7 +686,6 @@ def cambiar_estado(tracking_id):
         flash("Para pasar a 'En tránsito' debés asignar un transportista.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
-    # 2. INICIO DE LA NUEVA VALIDACIÓN LOGÍSTICA (AC10)
     if estado_actual == "En sucursal" and nuevo_estado == "Entregado" and not dni_retiro:
         flash("Debe ingresar el DNI de quien retira.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
@@ -673,14 +707,56 @@ def cambiar_estado(tracking_id):
     flash(f"Estado actualizado a: {nuevo_estado}", "success")
     return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
+@app.route("/envios/<tracking_id>/reasignar", methods=["POST"])
+@role_required("Supervisor")
+def reasignar_transportista(tracking_id):
+    envio = next((e for e in envios if e["tracking_id"] == tracking_id), None)
+    if not envio:
+        flash("Envío no encontrado.", "error")
+        return redirect(url_for("listar_envios"))
+
+    if envio["estado"] != "En tránsito":
+        flash("Solo se puede reasignar un transportista si el envío está 'En tránsito'.", "error")
+        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+
+    nuevo_transportista = request.form.get("nuevo_transportista", "").strip()
+    motivo = request.form.get("motivo", "").strip()
+    observaciones = request.form.get("observaciones", "").strip()
+
+    if not nuevo_transportista or not motivo:
+        flash("Debe seleccionar un transportista y un motivo de reasignación.", "error")
+        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+
+    transportista_anterior = envio.get("transportista", "Ninguno")
+    
+    if transportista_anterior == nuevo_transportista:
+        flash("El transportista seleccionado ya es el responsable actual del envío.", "error")
+        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+
+    usuario, _ = get_usuario()
+    nota_auditoria = f"Motivo: {motivo} | Obs: {observaciones or 'Sin observaciones'}"
+    texto_historial = f"Reasignado a {nuevo_transportista}. {nota_auditoria}"
+
+    envio["transportista"] = nuevo_transportista
+    envio["historial"].append({
+        "estado": "En tránsito",
+        "fecha": ahora_str(),
+        "usuario": usuario,
+        "nota": texto_historial,
+    })
+
+    registrar_auditoria(tracking_id, "Reasignación", f"Transportista: '{transportista_anterior}' → '{nuevo_transportista}'. {nota_auditoria}", usuario)
+    flash("Transportista reasignado correctamente.", "success")
+    return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+
 
 @app.route("/auditoria")
 @role_required("Supervisor")
 def auditoria():
     busqueda = request.args.get("q", "").strip().lower()
     
-    # Filter logs to only include state changes and data modifications
-    filtered_logs = [log for log in audit_logs if log["accion"] in ["Cambio de estado", "Edición", "Creación"]]
+    # 👇 ACÁ ESTABA EL DETALLE: Agregamos "Reasignación" a la lista permitida 👇
+    filtered_logs = [log for log in audit_logs if log["accion"] in ["Cambio de estado", "Edición", "Creación", "Reasignación"]]
     
     if busqueda:
         filtered_logs = [log for log in filtered_logs if busqueda in log["tracking_id"].lower()]

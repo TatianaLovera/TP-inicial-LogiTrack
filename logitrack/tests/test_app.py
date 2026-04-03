@@ -1489,3 +1489,37 @@ def test_busqueda_filtro_por_estado(client):
     assert 'value="En tránsito" selected' in texto_html or 'selected>En tránsito' in texto_html
     # Verificamos que el paquete en tránsito se esté mostrando
     assert "En tránsito" in texto_html
+
+def test_reasignar_transportista_en_mismo_formulario(client):
+    """Prueba que el supervisor pueda reasignar llenando transportista y motivo, sin elegir estado"""
+    from app import envios, cargar_datos_ejemplo, USUARIOS
+    envios.clear()
+    
+    # Creamos un segundo transportista de mentira para tener a quién asignarle
+    USUARIOS["transportista2"] = {"password": "tra123", "rol": "Transportista"}
+    cargar_datos_ejemplo()
+
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Buscamos a Pedro Lima (está En tránsito con el 'transportista' original)
+    envio = next((e for e in envios if e["estado"] == "En tránsito"), None)
+    tracking = envio["tracking_id"]
+    
+    datos_form = {
+        'nuevo_estado': '', # Lo dejamos vacío a propósito
+        'nuevo_transportista': 'transportista2',
+        'motivo_reasignacion': 'Problemas mecánicos del vehículo',
+        'nota': 'Se rompió el camión en Ruta 9'
+    }
+    
+    respuesta = client.post(f'/envios/{tracking}/cambiar-estado', data=datos_form, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Pruebas de la verdad
+    assert "Transportista reasignado correctamente." in texto_html
+    assert envio["transportista"] == "transportista2"
+    assert "Problemas mecánicos" in texto_html
+    assert "Ruta 9" in texto_html
+
+    # Limpiamos el transportista falso
+    del USUARIOS["transportista2"]
