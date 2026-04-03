@@ -6,6 +6,7 @@ import joblib
 import random
 import re
 from math import ceil
+import pandas as pd
 
 app = Flask(__name__)
 app.secret_key = "logitrack-secret-2024"
@@ -25,6 +26,7 @@ USUARIOS = {
     "operador": {"password": "op123", "rol": "Operador"},
     "supervisor": {"password": "sup123", "rol": "Supervisor"},
     "transportista": {"password": "tra123", "rol": "Transportista"},
+    "transportista2": {"password": "tra123", "rol": "Transportista"},
 }
 
 ESTADOS = [
@@ -80,15 +82,52 @@ def puede_editar_envio(envio):
 
 
 def validar_dni(dni):
-    """Valida que el DNI tenga solo números"""
-    return bool(re.match(r"^\d+$", dni))
+    """Valida que el DNI pertenezca a rangos válidos, excluyendo el salto administrativo."""
+    if not bool(re.match(r"^\d+$", dni)):
+        return False
+        
+    dni_num = int(dni)
+    
+    # Argentinos nativos (antes del salto administrativo)
+    es_nativo_1 = 1500000 <= dni_num <= 59999999
+    
+    # Argentinos nativos (después del salto administrativo)
+    es_nativo_2 = 70000000 <= dni_num <= 72000000
+    
+    # Extranjeros residentes
+    es_extranjero = 92000000 <= dni_num <= 96000000
+    
+    # Si es 65.000.000, las tres variables darán False, rechazando el DNI.
+    return es_nativo_1 or es_nativo_2 or es_extranjero
 
 
 def validar_telefono(telefono):
-    """Valida que el teléfono tenga solo números (ignorando guiones y espacios)"""
-    # Limpiamos guiones y espacios para la validación
-    telefono_limpio = telefono.replace("-", "").replace(" ", "")
-    return bool(re.match(r"^\d+$", telefono_limpio)) and len(telefono_limpio) >= 6
+    """Valida que sea un número de teléfono válido de Argentina."""
+    # 1. Quitamos espacios, guiones, paréntesis y el signo +
+    tel = re.sub(r'[\s\-\(\)\+]', '', telefono)
+    
+    # 2. Si quedaron letras o está vacío, es inválido
+    if not tel.isdigit():
+        return False
+        
+    # 3. Limpiamos los prefijos clásicos de Argentina
+    if tel.startswith('549'): # Código país + prefijo celular internacional
+        tel = tel[3:]
+    elif tel.startswith('54'): # Código país
+        tel = tel[2:]
+        
+    if tel.startswith('0'): # Prefijo interurbano
+        tel = tel[1:]
+        
+    # 4. En Argentina, área + número = 10 dígitos exactos (ej: 1123456789)
+    if len(tel) == 10:
+        return True
+        
+    # 5. Si la persona agregó el "15" (quedan 12 dígitos), validamos que esté ahí
+    if len(tel) == 12 and ('15' in tel[2:6]): 
+        return True
+        
+    return False
 
 
 def validar_email(email):
@@ -183,6 +222,7 @@ def panel():
 @role_required("Supervisor", "Operador")
 def listar_envios():
     busqueda = request.args.get("q", "").strip().lower()
+    estado_filtro = request.args.get("estado", "").strip()  # <-- NUEVO: Capturamos el estado
     date_from = request.args.get("date_from", "").strip()
     date_to = request.args.get("date_to", "").strip()
     sort_by = request.args.get("sort", "fecha_creacion")
@@ -204,6 +244,13 @@ def listar_envios():
             if busqueda in e["tracking_id"].lower()
             or busqueda in e["destinatario"]["nombre"].lower()
             or busqueda in e["remitente"]["nombre"].lower()
+        ]
+        
+    # Apply status filter (NUEVO)
+    if estado_filtro:
+        resultado = [
+            e for e in resultado 
+            if e["estado"].lower() == estado_filtro.lower()
         ]
     
     # Apply date range filter
@@ -260,6 +307,7 @@ def listar_envios():
         "listar.html",
         envios=paginados,
         busqueda=busqueda,
+        estado=estado_filtro,  # <-- NUEVO: Pasamos el estado a la vista
         date_from=date_from,
         date_to=date_to,
         sort_by=sort_by,
@@ -302,22 +350,27 @@ def nuevo_envio():
 
         # Validar DNI remitente
         if not validar_dni(remitente_dni):
-            flash("DNI del remitente debe contener solo números.", "error")
+            flash("DNI del remitente inválido (debe ser un número real entre los rangos vigentes).", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
         # Validar DNI destinatario
         if not validar_dni(destinatario_dni):
-            flash("DNI del destinatario debe contener solo números.", "error")
+            flash("DNI del destinatario inválido (debe ser un número real entre los rangos vigentes).", "error")
+            return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
+
+        #  VALIDACIÓN: DNIs iguales 
+        if remitente_dni == destinatario_dni:
+            flash("El DNI del remitente y del destinatario no pueden ser el mismo.", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
         # Validar teléfono remitente
         if not validar_telefono(remitente_telefono):
-            flash("Teléfono del remitente debe contener solo números.", "error")
+            flash("El teléfono del remitente no es válido para Argentina.", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
         # Validar teléfono destinatario
         if not validar_telefono(destinatario_telefono):
-            flash("Teléfono del destinatario debe contener solo números.", "error")
+            flash("El teléfono del destinatario no es válido para Argentina.", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
         # Validar email remitente
@@ -328,6 +381,10 @@ def nuevo_envio():
         # Validar email destinatario
         if destinatario_email and not validar_email(destinatario_email):
             flash("Email del destinatario inválido. Debe contener @ y dominio válido.", "error")
+            return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
+        
+        if remitente_direccion.lower() == destinatario_direccion.lower():
+            flash("La dirección del remitente y del destinatario no pueden ser la misma.", "error")
             return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
         if not acepta_ley:
@@ -344,7 +401,11 @@ def nuevo_envio():
         prioridad_calc = "Normal" # Valor por defecto por si la IA falla
         if modelo_ia:
             try:
-                pred = modelo_ia.predict([[distancia_simulada, peso_float, es_express_ia]])
+                datos_para_ia = pd.DataFrame(
+                    [[distancia_simulada, peso_float, es_express_ia]], 
+                    columns=['distancia_km', 'peso_kg', 'es_express']
+                )
+                pred = modelo_ia.predict(datos_para_ia)
                 prioridad_calc = pred[0]
             except Exception as e:
                 print(f"Error al calcular IA: {e}")
@@ -414,10 +475,14 @@ def detalle_envio(tracking_id):
     if rol == "Supervisor":
         registrar_auditoria(tracking_id, "Consulta", "Acceso al detalle completo del envío.", usuario)
 
+    # 👇 NUEVO: Extraemos la lista dinámica de transportistas 👇
+    lista_transportistas = [u for u, datos in USUARIOS.items() if datos["rol"] == "Transportista"]
+
     return render_template(
         "detalle.html",
         envio=envio,
         estados=ESTADOS,
+        transportistas_disponibles=lista_transportistas, # <-- Pasamos la lista a la vista
         puede_editar=puede_editar_envio(envio),
         **get_usuario_context(),
     )
@@ -463,22 +528,28 @@ def editar_envio(tracking_id):
 
         # Validar DNI remitente
         if not validar_dni(remitente_dni):
-            flash("DNI del remitente debe contener solo números.", "error")
+            flash("DNI del remitente inválido (debe ser un número real entre los rangos vigentes).", "error")
             return render_template("editar_envio.html", envio=envio, **get_usuario_context())
 
         # Validar DNI destinatario
         if not validar_dni(destinatario_dni):
-            flash("DNI del destinatario debe contener solo números.", "error")
+            flash("DNI del destinatario inválido (debe ser un número real entre los rangos vigentes).", "error")
             return render_template("editar_envio.html", envio=envio, **get_usuario_context())
+
+        # VALIDACIÓN: DNIs iguales 
+        if remitente_dni == destinatario_dni:
+            flash("El DNI del remitente y del destinatario no pueden ser el mismo.", "error")
+            return render_template("editar_envio.html", envio=envio, **get_usuario_context())
+    
 
         # Validar teléfono remitente
         if not validar_telefono(remitente_telefono):
-            flash("Teléfono del remitente debe contener solo números.", "error")
+            flash("El teléfono del remitente no es válido para Argentina.", "error")
             return render_template("editar_envio.html", envio=envio, **get_usuario_context())
 
         # Validar teléfono destinatario
         if not validar_telefono(destinatario_telefono):
-            flash("Teléfono del destinatario debe contener solo números.", "error")
+            flash("El teléfono del destinatario no es válido para Argentina.", "error")
             return render_template("editar_envio.html", envio=envio, **get_usuario_context())
 
         # Validar email remitente
@@ -490,6 +561,10 @@ def editar_envio(tracking_id):
         if destinatario_email and not validar_email(destinatario_email):
             flash("Email del destinatario inválido. Debe contener @ y dominio válido.", "error")
             return render_template("editar_envio.html", envio=envio, **get_usuario_context())
+        
+        if remitente_direccion.lower() == destinatario_direccion.lower():
+            flash("La dirección del remitente y del destinatario no pueden ser la misma.", "error")
+            return render_template("nuevo_envio.html", form=request.form, **get_usuario_context())
 
         cambios = []
         def cambia(campo_path, valor_nuevo, valor_anterior):
@@ -540,23 +615,53 @@ def cambiar_estado(tracking_id):
     nuevo_estado = request.form.get("nuevo_estado", "").strip()
     nota = request.form.get("nota", "").strip() or "Sin nota adicional."
     transportista = request.form.get("transportista", "").strip() or None
-    
-    # 1. Agregamos la captura del DNI desde el formulario (si existe)
     dni_retiro = request.form.get("dni_retiro", "").strip() 
     
+    # 👇 NUEVOS CAMPOS DE REASIGNACIÓN 👇
+    nuevo_transportista = request.form.get("nuevo_transportista", "").strip()
+    motivo_reasignacion = request.form.get("motivo_reasignacion", "").strip()
+    
     usuario, rol = get_usuario()
+    estado_actual = envio["estado"]
 
-    # Check if current state is final
     estados_finales = ["Cancelado", "Entregado", "Entregado a remitente"]
-    if envio["estado"] in estados_finales:
+    if estado_actual in estados_finales:
         flash("Este envío está en un estado final y no puede ser modificado.", "error")
+        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+
+    # =========================================================
+    # 👇 INTERCEPTOR DE REASIGNACIÓN PURA 👇
+    # Si no cambiaron el estado, pero eligieron otro transportista
+    # =========================================================
+    if not nuevo_estado and nuevo_transportista and estado_actual == "En tránsito" and rol == "Supervisor":
+        if not motivo_reasignacion:
+            flash("Debe seleccionar un motivo para la reasignación.", "error")
+            return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+        
+        transportista_anterior = envio.get("transportista", "Ninguno")
+        envio["transportista"] = nuevo_transportista
+        nota_final = f"Motivo: {motivo_reasignacion}. Obs: {nota}"
+        
+        envio["historial"].append({
+            "estado": "En tránsito",
+            "fecha": ahora_str(),
+            "usuario": usuario,
+            "nota": f"Reasignado a {nuevo_transportista}. {nota_final}",
+        })
+        registrar_auditoria(tracking_id, "Reasignación", f"Transportista: '{transportista_anterior}' → '{nuevo_transportista}'. {nota_final}", usuario)
+        flash("Transportista reasignado correctamente.", "success")
+        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+    # =========================================================
+
+    # Si no es reasignación, validamos que haya un estado como siempre
+    if not nuevo_estado:
+        flash("Debe seleccionar un nuevo estado.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
     if nuevo_estado not in ESTADOS:
         flash("Estado inválido.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
-    estado_actual = envio["estado"]
     permitido = False
 
     if rol == "Supervisor":
@@ -581,14 +686,12 @@ def cambiar_estado(tracking_id):
         flash("Para pasar a 'En tránsito' debés asignar un transportista.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
-    # 2. INICIO DE LA NUEVA VALIDACIÓN LOGÍSTICA (AC10)
     if estado_actual == "En sucursal" and nuevo_estado == "Entregado" and not dni_retiro:
         flash("Debe ingresar el DNI de quien retira.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
     
     if dni_retiro:
         nota = f"Retirado por DNI: {dni_retiro} - {nota}"
-    # FIN DE LA NUEVA VALIDACIÓN
 
     if transportista:
         envio["transportista"] = transportista
@@ -604,14 +707,56 @@ def cambiar_estado(tracking_id):
     flash(f"Estado actualizado a: {nuevo_estado}", "success")
     return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
+@app.route("/envios/<tracking_id>/reasignar", methods=["POST"])
+@role_required("Supervisor")
+def reasignar_transportista(tracking_id):
+    envio = next((e for e in envios if e["tracking_id"] == tracking_id), None)
+    if not envio:
+        flash("Envío no encontrado.", "error")
+        return redirect(url_for("listar_envios"))
+
+    if envio["estado"] != "En tránsito":
+        flash("Solo se puede reasignar un transportista si el envío está 'En tránsito'.", "error")
+        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+
+    nuevo_transportista = request.form.get("nuevo_transportista", "").strip()
+    motivo = request.form.get("motivo", "").strip()
+    observaciones = request.form.get("observaciones", "").strip()
+
+    if not nuevo_transportista or not motivo:
+        flash("Debe seleccionar un transportista y un motivo de reasignación.", "error")
+        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+
+    transportista_anterior = envio.get("transportista", "Ninguno")
+    
+    if transportista_anterior == nuevo_transportista:
+        flash("El transportista seleccionado ya es el responsable actual del envío.", "error")
+        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+
+    usuario, _ = get_usuario()
+    nota_auditoria = f"Motivo: {motivo} | Obs: {observaciones or 'Sin observaciones'}"
+    texto_historial = f"Reasignado a {nuevo_transportista}. {nota_auditoria}"
+
+    envio["transportista"] = nuevo_transportista
+    envio["historial"].append({
+        "estado": "En tránsito",
+        "fecha": ahora_str(),
+        "usuario": usuario,
+        "nota": texto_historial,
+    })
+
+    registrar_auditoria(tracking_id, "Reasignación", f"Transportista: '{transportista_anterior}' → '{nuevo_transportista}'. {nota_auditoria}", usuario)
+    flash("Transportista reasignado correctamente.", "success")
+    return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+
 
 @app.route("/auditoria")
 @role_required("Supervisor")
 def auditoria():
     busqueda = request.args.get("q", "").strip().lower()
     
-    # Filter logs to only include state changes and data modifications
-    filtered_logs = [log for log in audit_logs if log["accion"] in ["Cambio de estado", "Edición", "Creación"]]
+    # 👇 ACÁ ESTABA EL DETALLE: Agregamos "Reasignación" a la lista permitida 👇
+    filtered_logs = [log for log in audit_logs if log["accion"] in ["Cambio de estado", "Edición", "Creación", "Reasignación"]]
     
     if busqueda:
         filtered_logs = [log for log in filtered_logs if busqueda in log["tracking_id"].lower()]
@@ -760,7 +905,11 @@ def api_predecir_prioridad():
         express = int(datos.get('es_express', 0))
 
         # Le pasamos los datos al cerebro (espera una lista de listas)
-        prediccion = modelo_ia.predict([[distancia, peso, express]])
+        datos_para_ia = pd.DataFrame(
+            [[distancia, peso, express]], 
+            columns=['distancia_km', 'peso_kg', 'es_express']
+        )
+        prediccion = modelo_ia.predict(datos_para_ia)
         prioridad_calculada = prediccion[0]
 
         return jsonify({

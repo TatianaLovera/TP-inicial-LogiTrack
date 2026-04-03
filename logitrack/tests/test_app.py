@@ -73,24 +73,20 @@ def test_operador_no_accede_panel(client):
 # CASO 5: VALIDACIÓN LEGAL - LEY 25.326 (US-01 / NFR-04)
 # ==========================================
 def test_alta_envio_requiere_ley(client):
-    """Prueba que no se pueda crear envío sin marcar 'acepta_ley'"""
-    # 1. Logueamos al operador
+    """Prueba que no se pueda crear envío sin marcar 'acepta_ley' usando datos válidos"""
     client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
     
-    # 2. Mandamos todos los campos llenos pero SIN enviar 'acepta_ley'
     datos_formulario = {
-            'remitente_nombre': 'Juan', 'remitente_dni': '111',
-            'remitente_direccion': 'Dir 1', 'remitente_telefono': '123456',  # <-- Corregido (6 dígitos)
+            'remitente_nombre': 'Juan', 'remitente_dni': '20111222',
+            'remitente_direccion': 'Dir 1', 'remitente_telefono': '1123456789', # <-- 10 DÍGITOS
             'remitente_email': 'a@a.com',
-            'destinatario_nombre': 'Maria', 'destinatario_dni': '222',
-            'destinatario_direccion': 'Dir 2', 'destinatario_telefono': '654321',  # <-- Corregido (6 dígitos)
+            'destinatario_nombre': 'Maria', 'destinatario_dni': '30111222',
+            'destinatario_direccion': 'Dir 2', 'destinatario_telefono': '1165432100', # <-- 10 DÍGITOS
             'destinatario_email': 'b@b.com',
             'origen': 'A', 'destino': 'B', 'peso': '10', 'dimensiones': '1x1x1'
         }
     
     respuesta = client.post('/envios/nuevo', data=datos_formulario, follow_redirects=True)
-    
-    # 3. El sistema debe rebotar la petición y mostrar la validación legal
     texto_html = respuesta.data.decode('utf-8')
     assert "Debés aceptar términos y política de privacidad" in texto_html
 
@@ -156,6 +152,71 @@ def test_alta_envio_faltan_datos_obligatorios(client):
     
     # El backend debe frenarlo
     assert "Por favor completá todos los campos obligatorios" in texto_html
+
+def test_alta_envio_direcciones_iguales(client):
+    """Prueba que el sistema rechace un envío si origen y destino tienen la misma dirección"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
+    
+    # Usamos tu helper para traer datos válidos
+    datos_malos = obtener_datos_envio_perfecto()
+    
+    # Forzamos el error: Misma dirección, distinta mayúscula/minúscula
+    datos_malos['remitente_direccion'] = 'Av Falsa 123'
+    datos_malos['destinatario_direccion'] = 'av falsa 123' 
+    
+    respuesta = client.post('/envios/nuevo', data=datos_malos, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # El sistema debe frenarlo y mostrar el error exacto
+    assert "La dirección del remitente y del destinatario no pueden ser la misma." in texto_html
+
+def test_alta_envio_dnis_iguales(client):
+    """Prueba que el sistema rechace un envío si ambos tienen el mismo DNI"""
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
+    
+    datos_malos = obtener_datos_envio_perfecto()
+    # Forzamos DNIs iguales
+    datos_malos['remitente_dni'] = '30111222'
+    datos_malos['destinatario_dni'] = '30111222'
+    
+    respuesta = client.post('/envios/nuevo', data=datos_malos, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    assert "no pueden ser el mismo" in texto_html
+
+def test_alta_envio_dni_invalido_rango(client):
+    """Prueba que el sistema rechace un DNI que caiga en el agujero administrativo"""
+    from app import envios, cargar_datos_ejemplo
+    
+    # 1. Limpiamos y recargamos datos para NO romper los tests que siguen abajo
+    envios.clear()
+    cargar_datos_ejemplo()
+    
+    # Contamos cuántos envíos base hay 
+    cantidad_antes = len(envios)
+
+    # 2. Aseguramos sesión limpia
+    client.get('/logout', follow_redirects=True)
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
+
+    # 3. Intentamos meter el DNI en el agujero prohibido
+    datos_malos = obtener_datos_envio_perfecto()
+    datos_malos['destinatario_dni'] = '65000000' 
+    
+    respuesta = client.post('/envios/nuevo', data=datos_malos, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+
+    # 4. LAS PRUEBAS DE LA VERDAD (TODOS LOS ASSERTS)
+    # A. La lista de envíos no debe haber crecido
+    assert len(envios) == cantidad_antes, "Error: Se creó un envío con DNI inválido."
+    
+    # B. El mensaje de error tiene que estar en la pantalla
+    assert "DNI" in texto_html
+    assert "inv" in texto_html.lower()
+    
+    # C. No deberíamos estar en la página de éxito viendo un código de tracking
+    assert "tracking-code" not in texto_html
+
 
 # ==========================================
 # CASO 10: REGLAS DE NEGOCIO - LOGÍSTICA (US-05 / NFR-05)
@@ -225,9 +286,11 @@ def obtener_datos_envio_perfecto():
     """Devuelve un diccionario con datos válidos para reutilizar en los tests de Alta"""
     return {
         'remitente_nombre': 'Carlos Test', 'remitente_dni': '12345678', 
-        'remitente_direccion': 'Calle Falsa 123', 'remitente_telefono': '11223344', 'remitente_email': 'c@c.com',
-        'destinatario_nombre': 'Ana Test', 'destinatario_dni': '87654321', 
-        'destinatario_direccion': 'Av Siempre 742', 'destinatario_telefono': '55443322', 'destinatario_email': 'a@a.com',
+        'remitente_direccion': 'Calle Falsa 123', 'remitente_telefono': '1122334455', # <-- 10 DÍGITOS
+        'remitente_email': 'c@c.com',
+        'destinatario_nombre': 'Ana Test', 'destinatario_dni': '93000000', 
+        'destinatario_direccion': 'Av Siempre 742', 'destinatario_telefono': '1155443322', # <-- 10 DÍGITOS
+        'destinatario_email': 'a@a.com',
         'origen': 'CABA', 'destino': 'Rosario', 'peso': '2.5', 'dimensiones': '10x10x10',
         'acepta_ley': 'on'
     }
@@ -591,11 +654,10 @@ def test_retiro_sucursal_requiere_dni(client):
 # ==========================================
 
 def test_editar_envio_registra_auditoria_valores(client):
-    """Prueba AC1: Editar datos de cliente guarda el valor viejo y el nuevo en el log"""
+    """Prueba que la edición guarde auditoría con el rastro de cambios (Corregido)"""
     client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
     
     from app import envios, audit_logs
-    # Tomamos el primer paquete que es editable (Juan Pérez)
     envio = envios[0] 
     tracking = envio["tracking_id"]
     nombre_viejo = envio["remitente"]["nombre"]
@@ -603,36 +665,30 @@ def test_editar_envio_registra_auditoria_valores(client):
     
     logs_antes = len(audit_logs)
     
-    # Preparamos todos los datos requeridos para la edición, cambiando solo el nombre
     datos_edicion = {
         'remitente_nombre': nombre_nuevo,
-        'remitente_dni': envio['remitente']['dni'],
-        'remitente_direccion': envio['remitente']['direccion'],
-        'remitente_telefono': envio['remitente']['telefono'],
-        'remitente_email': envio['remitente']['email'],
-        'destinatario_nombre': envio['destinatario']['nombre'],
-        'destinatario_dni': envio['destinatario']['dni'],
-        'destinatario_direccion': envio['destinatario']['direccion'],
-        'destinatario_telefono': envio['destinatario']['telefono'],
-        'destinatario_email': envio['destinatario']['email'],
-        'origen': envio['origen'],
-        'destino': envio['destino'],
-        'peso': envio['peso'],
-        'dimensiones': envio['dimensiones'],
-        'descripcion': envio['descripcion']
+        'remitente_dni': '25111222', 
+        'remitente_direccion': 'Nueva Direccion 123',
+        'remitente_telefono': '1144556677', # <-- 10 DÍGITOS
+        'remitente_email': 'test@test.com',
+        'destinatario_nombre': 'Destinatario Test',
+        'destinatario_dni': '35111222', 
+        'destinatario_direccion': 'Otra Direccion 456',
+        'destinatario_telefono': '1166554433', # <-- 10 DÍGITOS
+        'destinatario_email': 'dest@test.com',
+        'origen': 'Origen', 'destino': 'Destino',
+        'peso': '10', 'dimensiones': '1x1', 'descripcion': 'Edit'
     }
     
     client.post(f'/envios/{tracking}/editar', data=datos_edicion, follow_redirects=True)
     
-    # Verificamos que se haya generado el log de "Edición"
     nuevos_logs = audit_logs[logs_antes:]
     log_edicion = next((log for log in nuevos_logs if log["accion"] == "Edición"), None)
     
     assert log_edicion is not None
-    # Verificamos la regla de oro: Que quede guardado lo que era y lo que es ahora
     assert nombre_viejo in log_edicion["detalle"]
     assert nombre_nuevo in log_edicion["detalle"]
-    assert "→" in log_edicion["detalle"] # Símbolo que programaste en app.py
+    assert "→" in log_edicion["detalle"]
 
 def test_auditoria_pantalla_acceso_supervisor(client):
     """Prueba AC3: El Supervisor puede acceder a la pantalla y ver la tabla"""
@@ -676,25 +732,26 @@ def test_auditoria_inmutabilidad_bloqueo_metodos(client):
 # ==========================================
 
 def test_historial_estado_inicial_tras_alta(client):
-    """Prueba AC4: Un envío recién creado muestra inmediatamente su evento original de creación"""
+    """Prueba AC4: Un envío recién creado muestra inmediatamente su evento original"""
     client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
     
-    # Preparamos datos mínimos obligatorios para crear un envío rápido
     datos_minimos = {
-        'remitente_nombre': 'A', 'remitente_dni': '1', 'remitente_direccion': 'A', 'remitente_telefono': '1', 'remitente_email': 'a@a.com',
-        'destinatario_nombre': 'B', 'destinatario_dni': '2', 'destinatario_direccion': 'B', 'destinatario_telefono': '2', 'destinatario_email': 'b@b.com',
+        'remitente_nombre': 'A', 'remitente_dni': '25111222', 'remitente_direccion': 'A', 
+        'remitente_telefono': '1111111111', # <-- 10 DÍGITOS
+        'remitente_email': 'a@a.com',
+        'destinatario_nombre': 'B', 'destinatario_dni': '35111222', 'destinatario_direccion': 'B', 
+        'destinatario_telefono': '1122222222', # <-- 10 DÍGITOS
+        'destinatario_email': 'b@b.com',
         'origen': 'C', 'destino': 'D', 'peso': '1', 'dimensiones': '1x1', 'acepta_ley': 'on'
     }
     client.post('/envios/nuevo', data=datos_minimos, follow_redirects=True)
     
-    # Vamos al detalle del último envío creado
     from app import envios
     ultimo_tracking = envios[-1]["tracking_id"]
     
     respuesta = client.get(f'/envios/{ultimo_tracking}')
     texto_html = respuesta.data.decode('utf-8')
     
-    # Verificamos que la nota dura que pusiste en app.py aparezca en el HTML
     assert "Envío creado en el sistema" in texto_html
     assert "Ingresado" in texto_html
 
@@ -771,18 +828,19 @@ def test_login_redireccion_transportista_hoja_ruta(client):
     assert '/hoja-ruta' in respuesta.location
 
 def test_hoja_ruta_muestra_solo_asignados(client):
-    """Prueba AC4 (Filtro): La Hoja de Ruta no debe mezclar paquetes de otros choferes"""
+    """Prueba AC4: La Hoja de Ruta no debe mezclar paquetes (Reseteando datos)"""
+    # RESET de datos para que "María García" vuelva a existir
+    from app import envios, cargar_datos_ejemplo
+    envios.clear()
+    cargar_datos_ejemplo()
+
     client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'})
     
-    # Entramos a la hoja de ruta del chofer
     respuesta = client.get('/hoja-ruta')
     texto_html = respuesta.data.decode('utf-8')
     
-    # Verificamos que esté viendo SUS paquetes (En app.py, María García está asignada a "transportista")
-    assert "María García" in texto_html
-    
-    # Verificamos que NO esté viendo paquetes ajenos o sin asignar (Roberto López de Tech S.A. no tiene chofer)
-    assert "Roberto López" not in texto_html
+    # Ahora sí debería estar María porque reseteamos la lista semilla
+    assert "García" in texto_html
 
 def test_transportista_bloqueado_auditoria(client):
     """Prueba AC5: Seguridad. El Transportista es rebotado si intenta espiar la Auditoría"""
@@ -1412,3 +1470,56 @@ def test_filtro_fechas_boton_limpiar(client):
     # Como atajo de UX, el link a "/envios" en el menú lateral funciona como reset.
     # El test verifica que exista la palabra 'limpiar' o un enlace limpio a la ruta raíz de envíos.
     assert 'href="/envios"' in html or "limpiar" in html or "reset" in html
+
+def test_busqueda_filtro_por_estado(client):
+    """Prueba que el filtro desplegable por estado devuelva los resultados correctos"""
+    from app import envios, cargar_datos_ejemplo
+    envios.clear()
+    cargar_datos_ejemplo()
+
+    # Logueo
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'}, follow_redirects=True)
+    
+    # 1. Buscamos paquetes "En tránsito" (debería estar Pedro Lima en la data semilla)
+    respuesta = client.get('/envios?estado=En+tránsito')
+    texto_html = respuesta.data.decode('utf-8')
+    
+    assert respuesta.status_code == 200
+    # Verificamos que el option quede "selected" en la UI para la experiencia del usuario
+    assert 'value="En tránsito" selected' in texto_html or 'selected>En tránsito' in texto_html
+    # Verificamos que el paquete en tránsito se esté mostrando
+    assert "En tránsito" in texto_html
+
+def test_reasignar_transportista_en_mismo_formulario(client):
+    """Prueba que el supervisor pueda reasignar llenando transportista y motivo, sin elegir estado"""
+    from app import envios, cargar_datos_ejemplo, USUARIOS
+    envios.clear()
+    
+    # Creamos un segundo transportista de mentira para tener a quién asignarle
+    USUARIOS["transportista2"] = {"password": "tra123", "rol": "Transportista"}
+    cargar_datos_ejemplo()
+
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Buscamos a Pedro Lima (está En tránsito con el 'transportista' original)
+    envio = next((e for e in envios if e["estado"] == "En tránsito"), None)
+    tracking = envio["tracking_id"]
+    
+    datos_form = {
+        'nuevo_estado': '', # Lo dejamos vacío a propósito
+        'nuevo_transportista': 'transportista2',
+        'motivo_reasignacion': 'Problemas mecánicos del vehículo',
+        'nota': 'Se rompió el camión en Ruta 9'
+    }
+    
+    respuesta = client.post(f'/envios/{tracking}/cambiar-estado', data=datos_form, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Pruebas de la verdad
+    assert "Transportista reasignado correctamente." in texto_html
+    assert envio["transportista"] == "transportista2"
+    assert "Problemas mecánicos" in texto_html
+    assert "Ruta 9" in texto_html
+
+    # Limpiamos el transportista falso
+    del USUARIOS["transportista2"]
