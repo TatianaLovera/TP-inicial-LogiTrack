@@ -617,9 +617,10 @@ def cambiar_estado(tracking_id):
     transportista = request.form.get("transportista", "").strip() or None
     dni_retiro = request.form.get("dni_retiro", "").strip() 
     
-    # 👇 NUEVOS CAMPOS DE REASIGNACIÓN 👇
+    # 👇 NUEVOS CAMPOS DE REASIGNACIÓN Y FALLIDA 👇
     nuevo_transportista = request.form.get("nuevo_transportista", "").strip()
     motivo_reasignacion = request.form.get("motivo_reasignacion", "").strip()
+    motivo_fallida = request.form.get("motivo_fallida", "").strip() # <-- NUEVO
     
     usuario, rol = get_usuario()
     estado_actual = envio["estado"]
@@ -630,7 +631,7 @@ def cambiar_estado(tracking_id):
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
     # =========================================================
-    # 👇 INTERCEPTOR DE REASIGNACIÓN PURA 👇
+    # INTERCEPTOR DE REASIGNACIÓN PURA
     # Si no cambiaron el estado, pero eligieron otro transportista
     # =========================================================
     if not nuevo_estado and nuevo_transportista and estado_actual == "En tránsito" and rol == "Supervisor":
@@ -692,6 +693,10 @@ def cambiar_estado(tracking_id):
     
     if dni_retiro:
         nota = f"Retirado por DNI: {dni_retiro} - {nota}"
+
+    # 👇 NUEVO: Incorporar el motivo de falla a la nota 👇
+    if nuevo_estado == "Visita Fallida" and motivo_fallida:
+        nota = f"Motivo: {motivo_fallida} - {nota}"
 
     if transportista:
         envio["transportista"] = transportista

@@ -59,6 +59,18 @@
                     </select>
                 </div>
 
+                <div class="form-group" id="motivo-fallida-group" style="display: none; margin-top: 1rem;">
+                    <label for="motivo_fallida">Motivo de Visita Fallida <span class="required">*</span></label>
+                    <select id="motivo_fallida" name="motivo_fallida">
+                        <option value="">— Seleccionar Motivo —</option>
+                        <option value="Domicilio cerrado / Nadie responde">Domicilio cerrado / Nadie responde</option>
+                        <option value="Dirección incorrecta o inexistente">Dirección incorrecta o inexistente</option>
+                        <option value="Destinatario se mudó / Desconocido">Destinatario se mudó / Desconocido</option>
+                        <option value="Rechazado por el destinatario">Rechazado por el destinatario</option>
+                        <option value="Zona inaccesible / Inseguridad">Zona inaccesible / Inseguridad</option>
+                        <option value="Fin de jornada / Falta de tiempo">Fin de jornada / Falta de tiempo</option>
+                    </select>
+                </div>
                 {% if rol == 'Supervisor' and envio.estado == 'En tránsito' %}
                 <div style="margin: 1.5rem 0; padding: 1.2rem; background: rgba(245, 158, 11, 0.05); border: 1px dashed rgba(245, 158, 11, 0.4); border-radius: var(--radius);">
                     <h4 style="color: var(--warning); margin-bottom: 0.5rem; font-size: 0.85rem; text-transform: uppercase;">⚠️ Reasignar Transportista</h4>
@@ -89,8 +101,9 @@
                     </div>
                 </div>
                 {% endif %}
+
                 {% if rol == 'Supervisor' %}
-                <div class="form-group" id="transportista-group" style="display: none;">
+                <div class="form-group" id="transportista-group" style="display: none; margin-top: 1rem;">
                     <label for="transportista">Transportista (obligatorio para “En tránsito”)</label>
                     <select id="transportista" name="transportista">
                         <option value="">— Sin asignar —</option>
@@ -101,7 +114,7 @@
                 </div>
                 {% endif %}
                 
-                <div class="form-group"><label for="nota">Nota / Observaciones adicionales</label><textarea id="nota" name="nota" rows="2"></textarea></div>
+                <div class="form-group" style="margin-top: 1rem;"><label for="nota">Nota / Observaciones adicionales</label><textarea id="nota" name="nota" rows="2"></textarea></div>
                 <button type="submit" class="btn btn-primary">Ejecutar Acción</button>
             </form>
         {% endif %}
@@ -135,15 +148,32 @@ if (estadoSelect) {
     estadoSelect.addEventListener('change', function() {
         const transportistaGroup = document.getElementById('transportista-group');
         const transportistaSelect = document.getElementById('transportista');
-        if (!transportistaGroup || !transportistaSelect) return;
+        
+        const motivoFallidaGroup = document.getElementById('motivo-fallida-group');
+        const motivoFallidaSelect = document.getElementById('motivo_fallida');
 
-        if (this.value === 'En tránsito') {
-            transportistaGroup.style.display = 'block';
-            transportistaSelect.required = true;
-        } else {
-            transportistaGroup.style.display = 'none';
-            transportistaSelect.required = false;
-            transportistaSelect.value = ''; // Limpiar selección
+        // Logica para mostrar/ocultar asignación de transportista
+        if (transportistaGroup && transportistaSelect) {
+            if (this.value === 'En tránsito') {
+                transportistaGroup.style.display = 'block';
+                transportistaSelect.required = true;
+            } else {
+                transportistaGroup.style.display = 'none';
+                transportistaSelect.required = false;
+                transportistaSelect.value = ''; // Limpiar selección
+            }
+        }
+
+        // 👇 NUEVA: Logica para mostrar/ocultar motivo de visita fallida 👇
+        if (motivoFallidaGroup && motivoFallidaSelect) {
+            if (this.value === 'Visita Fallida') {
+                motivoFallidaGroup.style.display = 'block';
+                motivoFallidaSelect.required = true;
+            } else {
+                motivoFallidaGroup.style.display = 'none';
+                motivoFallidaSelect.required = false;
+                motivoFallidaSelect.value = ''; // Limpiar selección
+            }
         }
     });
 }

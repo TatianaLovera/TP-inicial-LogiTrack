@@ -1523,3 +1523,35 @@ def test_reasignar_transportista_en_mismo_formulario(client):
 
     # Limpiamos el transportista falso
     del USUARIOS["transportista2"]
+
+
+def test_cambio_estado_visita_fallida_con_motivo(client):
+    """Prueba que el transportista pueda marcar Visita Fallida y se guarde el motivo"""
+    from app import envios, cargar_datos_ejemplo
+    envios.clear()
+    cargar_datos_ejemplo()
+
+    # Logueo como transportista
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'}, follow_redirects=True)
+    
+    # Buscamos un paquete que el transportista tenga En tránsito
+    envio = next((e for e in envios if e["estado"] == "En tránsito" and e["transportista"] == "transportista"), None)
+    tracking = envio["tracking_id"]
+    
+    datos_form = {
+        'nuevo_estado': 'Visita Fallida',
+        'motivo_fallida': 'Domicilio cerrado / Nadie responde',
+        'nota': 'Toqué timbre 3 veces y no salió nadie'
+    }
+    
+    respuesta = client.post(f'/envios/{tracking}/cambiar-estado', data=datos_form, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificaciones
+    assert "Estado actualizado a: Visita Fallida" in texto_html
+    assert envio["estado"] == "Visita Fallida"
+    
+    # Verificamos que el motivo se haya inyectado correctamente en el historial
+    historial_reciente = envio["historial"][-1]["nota"]
+    assert "Motivo: Domicilio cerrado / Nadie responde" in historial_reciente
+    assert "Toqué timbre 3 veces" in historial_reciente
