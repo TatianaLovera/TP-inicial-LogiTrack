@@ -11,6 +11,13 @@ import pandas as pd
 app = Flask(__name__)
 app.secret_key = "logitrack-secret-2024"
 app.permanent_session_lifetime = datetime.timedelta(minutes=30)
+@app.after_request
+def evitar_cache_navegador(response):
+    """US-27: Previene que el botón 'Atrás' muestre páginas protegidas cacheadas"""
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 envios = []
 audit_logs = []

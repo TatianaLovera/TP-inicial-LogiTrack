@@ -1647,3 +1647,27 @@ def test_inactividad_sesion_us_28(client):
     texto_html = respuesta.data.decode('utf-8')
     assert "iniciarControlInactividad()" in texto_html
     assert "30 * 60 * 1000" in texto_html
+
+def test_logout_y_proteccion_us_27(client):
+    """Prueba el cierre de sesión y la prevención de caché en el navegador (US-27)"""
+    
+    # 1. Logueamos a un usuario válido para abrir la sesión (usamos al supervisor que sabemos que funciona)
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Validamos que efectivamente está logueado
+    with client.session_transaction() as session_activa:
+        assert session_activa.get("usuario") == "supervisor"
+
+    # 2. Hacemos la petición de cierre de sesión
+    respuesta_logout = client.get('/logout', follow_redirects=True)
+    
+    # 3. Verificamos que la sesión se haya borrado por completo
+    with client.session_transaction() as session_limpia:
+        assert session_limpia.get("usuario") is None
+        
+    # 4. Verificamos que se inyecten las cabeceras Anti-Caché para bloquear el botón "Atrás"
+    headers = respuesta_logout.headers
+    assert "no-cache" in headers.get("Cache-Control", "")
+    assert "no-store" in headers.get("Cache-Control", "")
+    assert headers.get("Pragma") == "no-cache"
+    assert headers.get("Expires") == "0"
