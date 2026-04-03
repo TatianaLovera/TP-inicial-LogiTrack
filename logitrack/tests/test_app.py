@@ -1671,3 +1671,21 @@ def test_logout_y_proteccion_us_27(client):
     assert "no-store" in headers.get("Cache-Control", "")
     assert headers.get("Pragma") == "no-cache"
     assert headers.get("Expires") == "0"
+
+def test_spinner_global_us_25(client):
+    """Prueba la inyección de la estructura y scripts del indicador de carga (US-25)"""
+    
+    # 1. Hacemos un POST al login para que nos redirija a una pantalla interna (que sí hereda de base.html)
+    respuesta = client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+
+    # 2. Verificamos que el contenedor visual del spinner exista en el DOM
+    assert 'id="global-spinner"' in texto_html
+    assert 'class="spinner-circle"' in texto_html
+    assert 'Procesando solicitud...' in texto_html
+
+    # 3. Verificamos que la lógica de JavaScript para interceptar eventos esté presente
+    assert "document.querySelectorAll('form').forEach" in texto_html
+    assert "spinner.style.display = 'flex'" in texto_html
+    assert "btn.disabled = true" in texto_html
+    assert "window.addEventListener('pageshow'" in texto_html
