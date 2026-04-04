@@ -71,7 +71,7 @@
                 </div>
 
                 <div class="form-group" id="dni-retiro-group" style="display: none; margin-top: 1rem;">
-                    <label for="dni_retiro">DNI de la persona que retira <span class="required">*</span></label>
+                    <label for="dni_retiro">DNI de la persona que recibe <span class="required">*</span></label>
                     <input type="text" id="dni_retiro" name="dni_retiro" class="form-control" placeholder="Ej: 30123456">
                 </div>
 
@@ -87,7 +87,7 @@
                 </div>
 
                 <div class="form-group" id="evidencia-group" style="display: none; margin-top: 1rem;">
-                    <label for="evidencia">Evidencia (Foto del paquete o Firma) <span class="required">*</span></label>
+                    <label for="evidencia">Evidencia (Foto del paquete o Firma) <small style="color: var(--text-muted);">(Opcional)</small></label>
                     <input type="file" id="evidencia" name="evidencia" class="form-control" accept="image/*">
                 </div>
 
@@ -202,8 +202,9 @@ if (estadoSelect) {
             }
         }
 
+        // 👇 CAMBIO: DNI ahora es obligatorio siempre que el estado sea Entregado 👇
         if (dniRetiroGroup && dniRetiroInput) {
-            if (estadoActual === 'En sucursal' && this.value === 'Entregado') {
+            if (this.value === 'Entregado') {
                 dniRetiroGroup.style.display = 'block';
                 dniRetiroInput.required = true;
             } else {
@@ -213,10 +214,11 @@ if (estadoSelect) {
             }
         }
 
+        // 👇 CAMBIO: Evidencia se muestra pero ya NO es obligatoria 👇
         if (evidenciaGroup && evidenciaInput) {
             if (this.value === 'Entregado') {
                 evidenciaGroup.style.display = 'block';
-                evidenciaInput.required = true;
+                evidenciaInput.required = false; // Se marca en false
             } else {
                 evidenciaGroup.style.display = 'none';
                 evidenciaInput.required = false;
