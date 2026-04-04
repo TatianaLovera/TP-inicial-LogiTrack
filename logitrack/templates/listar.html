@@ -57,9 +57,7 @@
             <tr>
                 <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='tracking_id', order='asc' if sort_by == 'tracking_id' and sort_order == 'desc' else 'desc') }}">Tracking ID{% if sort_by == 'tracking_id' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='remitente', order='asc' if sort_by == 'remitente' and sort_order == 'desc' else 'desc') }}">Remitente{% if sort_by == 'remitente' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
-                {% if rol == "Supervisor" %}<th>DNI Remitente</th>{% endif %}
                 <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='destinatario', order='asc' if sort_by == 'destinatario' and sort_order == 'desc' else 'desc') }}">Destinatario{% if sort_by == 'destinatario' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
-                {% if rol == "Supervisor" %}<th>DNI Destinatario</th>{% endif %}
                 <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='origen', order='asc' if sort_by == 'origen' and sort_order == 'desc' else 'desc') }}">Origen{% if sort_by == 'origen' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='destino', order='asc' if sort_by == 'destino' and sort_order == 'desc' else 'desc') }}">Destino{% if sort_by == 'destino' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 
@@ -77,9 +75,7 @@
             <tr>
                 <td><code class="tracking-code">{{ envio.tracking_id }}</code></td>
                 <td>{{ envio.remitente.nombre }}</td>
-                {% if rol == "Supervisor" %}<td>{{ envio.remitente.dni }}</td>{% endif %}
                 <td>{{ envio.destinatario.nombre }}</td>
-                {% if rol == "Supervisor" %}<td>{{ envio.destinatario.dni }}</td>{% endif %}
                 <td>{{ envio.origen }}</td>
                 <td>{{ envio.destino }}</td>
                 

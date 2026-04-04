@@ -1814,3 +1814,35 @@ def test_restriccion_visibilidad_evidencia_us_33(client):
     res = client.get(f'/envios/{tracking_id}')
     # No debería ver el nombre del archivo de evidencia
     assert "foto_secreta.jpg" not in res.data.decode('utf-8')
+
+def test_privacidad_lista_envios_supervisor(client):
+    """
+    US-Privacidad: Verifica que el Supervisor NO vea DNI en la lista general.
+    Usamos un DNI único para evitar falsos positivos con la palabra 'ANONIMIZADO'.
+    """
+    from app import envios, ahora_str
+    
+    # 1. Creamos un envío de prueba con un DNI ÚNICO que no esté en el sistema
+    dni_unico = "99888777" 
+    tracking_id = "TEST-PRIVACIDAD-999"
+    
+    envios.append({
+        "tracking_id": tracking_id,
+        "estado": "Ingresado",
+        "fecha_creacion": ahora_str(),
+        "remitente": {"nombre": "Juan Privacidad", "dni": dni_unico},
+        "destinatario": {"nombre": "Ana Destino", "dni": "11222333"},
+        "origen": "Origen Test", "destino": "Destino Test",
+        "historial": []
+    })
+    
+    # 2. Login como Supervisor
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+    
+    # 3. Accedemos a la lista general
+    respuesta = client.get('/envios')
+    html_lista = respuesta.data.decode('utf-8')
+    
+    # 4. Verificaciones
+    assert "Juan Privacidad" in html_lista, "El envío debería aparecer en la lista"
+    assert dni_unico not in html_lista, f"¡ALERTA! El DNI {dni_unico} es visible en la tabla general."
