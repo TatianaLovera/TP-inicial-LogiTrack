@@ -859,22 +859,27 @@ def test_transportista_bloqueado_auditoria(client):
 # ==========================================
 
 def test_transportista_cambia_estado_permitido(client):
-    """Prueba AC2 (Camino Feliz): El chofer puede marcar su paquete como Entregado"""
+    """Prueba AC2 (Camino Feliz): El chofer puede marcar su paquete como Entregado con evidencia"""
+    import io
     client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'})
-    
-    # Buscamos en app.py un paquete "En tránsito" asignado a "transportista" (ej: Juan Pérez)
+
     from app import envios
     envio = next(e for e in envios if e["estado"] == "En tránsito" and e.get("transportista") == "transportista")
     tracking = envio["tracking_id"]
-    
-    # El transportista manda el formulario para marcarlo entregado
-    respuesta = client.post(f'/envios/{tracking}/cambiar-estado', 
-                            data={'nuevo_estado': 'Entregado', 'nota': 'Entregado en mano'}, 
+
+    # Agregamos una evidencia simulada porque ahora es obligatoria (US-33)
+    foto = (io.BytesIO(b"foto-test"), "prueba.jpg")
+
+    respuesta = client.post(f'/envios/{tracking}/cambiar-estado',
+                            data={
+                                'nuevo_estado': 'Entregado', 
+                                'nota': 'Entregado en mano',
+                                'evidencia': foto
+                            }, 
+                            content_type='multipart/form-data',
                             follow_redirects=True)
-    texto_html = respuesta.data.decode('utf-8')
     
-    # El sistema debe procesarlo con éxito
-    assert "Estado actualizado a: Entregado" in texto_html
+    assert "Estado actualizado a: Entregado" in respuesta.data.decode('utf-8')
 
 def test_transportista_bloqueado_estado_invalido(client):
     """Prueba AC2 (Hackeo): El chofer intenta pasar su paquete a 'Cancelado'"""
@@ -1749,3 +1754,63 @@ def test_visita_fallida_us_32(client):
     # Verificamos los mensajes Flash en el HTML
     assert "Estado actualizado a: Visita Fallida" in texto_exito
     assert "ALERTA IA - Datos Erróneos" in texto_exito
+
+def test_evidencia_entrega_us_33(client):
+    """Prueba la obligatoriedad y almacenamiento de evidencia digital (US-33)"""
+    from app import envios, ahora_str
+    import io
+
+    tracking_id = "TEST-US33-EVIDENCIA"
+    # Completamos el objeto con datos de remitente/destinatario para evitar UndefinedError en la vista
+    envio_test = {
+        "tracking_id": tracking_id,
+        "estado": "En sucursal",
+        "transportista": "transportista",
+        "fecha_creacion": ahora_str(),
+        "remitente": {"nombre": "R", "dni": "1", "direccion": "D", "telefono": "1", "email": "r@test.com"},
+        "destinatario": {"nombre": "D", "dni": "2", "direccion": "E", "telefono": "2", "email": "d@test.com"},
+        "historial": []
+    }
+    envios.append(envio_test)
+
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+
+    # 1. Intentar sin archivo (Debe fallar)
+    res_error = client.post(f'/envios/{tracking_id}/cambiar-estado', data={
+        'nuevo_estado': 'Entregado',
+        'dni_retiro': '12345678'
+    }, follow_redirects=True)
+    assert "Debe adjuntar una evidencia" in res_error.data.decode('utf-8')
+
+    # 2. Con archivo (Éxito)
+    foto_simulada = (io.BytesIO(b"foto"), "entrega.jpg")
+    res_exito = client.post(f'/envios/{tracking_id}/cambiar-estado', data={
+        'nuevo_estado': 'Entregado',
+        'dni_retiro': '12345678',
+        'evidencia': foto_simulada
+    }, content_type='multipart/form-data', follow_redirects=True)
+    
+    assert "Estado actualizado a: Entregado" in res_exito.data.decode('utf-8')
+
+def test_restriccion_visibilidad_evidencia_us_33(client):
+    """Prueba que el Operador no vea la evidencia si el envío no está entregado (US-33)"""
+    from app import envios, ahora_str
+    
+    # Creamos un envío que tiene una evidencia (por error o carga previa) pero sigue en tránsito
+    tracking_id = "TEST-US33-PRIVACIDAD"
+    envios.append({
+        "tracking_id": tracking_id,
+        "estado": "En tránsito",
+        "evidencia": "foto_secreta.jpg",
+        "fecha_creacion": ahora_str(),
+        "remitente": {"nombre": "R"}, "destinatario": {"nombre": "D"},
+        "historial": []
+    })
+
+    # Login como Operador
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+
+    # El Operador entra al detalle
+    res = client.get(f'/envios/{tracking_id}')
+    # No debería ver el nombre del archivo de evidencia
+    assert "foto_secreta.jpg" not in res.data.decode('utf-8')

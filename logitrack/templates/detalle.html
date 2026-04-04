@@ -30,6 +30,10 @@
             <div class="detail-row"><dt>Alerta IA</dt><dd><span class="badge badge-rojo" style="background-color: #ef4444; color: white;">⚠️ {{ envio.alerta_ia }}</span></dd></div>
             {% endif %}
 
+            {% if envio.evidencia and (rol != 'Operador' or envio.estado != 'En tránsito') %}
+            <div class="detail-row"><dt>Evidencia de Entrega</dt><dd>📎 {{ envio.evidencia }}</dd></div>
+            {% endif %}
+
             {% if rol != "Transportista" %}<div class="detail-row"><dt>Descripción</dt><dd>{{ envio.descripcion }}</dd></div>{% endif %}
             <div class="detail-row"><dt>Fecha de creación</dt><dd>{{ envio.fecha_creacion }}</dd></div>
             {% if rol != "Transportista" %}<div class="detail-row"><dt>Transportista</dt><dd>{{ envio.transportista or 'Sin asignar' }}</dd></div>{% endif %}
@@ -45,7 +49,8 @@
             <div class="estado-final"><p>Como operador sólo podés cambiar el estado cuando el envío está "Ingresado".</p></div>
         {% else %}
             <p class="estado-info">Estado actual: <span class="badge badge-{{ envio.estado | replace(' ', '-') | lower }}">{{ envio.estado }}</span></p>
-            <form method="POST" action="{{ url_for('cambiar_estado', tracking_id=envio.tracking_id) }}">
+            
+            <form method="POST" action="{{ url_for('cambiar_estado', tracking_id=envio.tracking_id) }}" enctype="multipart/form-data">
                 
                 <div class="form-group">
                     <label for="nuevo_estado">Nuevo estado {% if envio.estado == 'En tránsito' and rol == 'Supervisor' %}(Opcional si solo va a reasignar){% endif %}</label>
@@ -79,6 +84,11 @@
                         <option value="Zona peligrosa">Zona peligrosa</option>
                         <option value="Rechazado por destinatario">Rechazado por destinatario</option>
                     </select>
+                </div>
+
+                <div class="form-group" id="evidencia-group" style="display: none; margin-top: 1rem;">
+                    <label for="evidencia">Evidencia (Foto del paquete o Firma) <span class="required">*</span></label>
+                    <input type="file" id="evidencia" name="evidencia" class="form-control" accept="image/*">
                 </div>
 
                 {% if rol == 'Supervisor' and envio.estado == 'En tránsito' %}
@@ -154,7 +164,7 @@
 {% block scripts %}
 <script>
 const estadoSelect = document.getElementById('nuevo_estado');
-const estadoActual = "{{ envio.estado }}"; // Capturamos el estado actual del envío
+const estadoActual = "{{ envio.estado }}"; 
 
 if (estadoSelect) {
     estadoSelect.addEventListener('change', function() {
@@ -167,7 +177,9 @@ if (estadoSelect) {
         const dniRetiroGroup = document.getElementById('dni-retiro-group');
         const dniRetiroInput = document.getElementById('dni_retiro');
 
-        // Logica para mostrar/ocultar asignación de transportista
+        const evidenciaGroup = document.getElementById('evidencia-group');
+        const evidenciaInput = document.getElementById('evidencia');
+
         if (transportistaGroup && transportistaSelect) {
             if (this.value === 'En tránsito') {
                 transportistaGroup.style.display = 'block';
@@ -179,7 +191,6 @@ if (estadoSelect) {
             }
         }
 
-        // Logica para mostrar/ocultar motivo de visita fallida (US-32)
         if (motivoFallidaGroup && motivoFallidaSelect) {
             if (this.value === 'Visita Fallida') {
                 motivoFallidaGroup.style.display = 'block';
@@ -191,7 +202,6 @@ if (estadoSelect) {
             }
         }
 
-        // Lógica para DNI de retiro (solo cuando pasa de "En sucursal" a "Entregado")
         if (dniRetiroGroup && dniRetiroInput) {
             if (estadoActual === 'En sucursal' && this.value === 'Entregado') {
                 dniRetiroGroup.style.display = 'block';
@@ -200,6 +210,17 @@ if (estadoSelect) {
                 dniRetiroGroup.style.display = 'none';
                 dniRetiroInput.required = false;
                 dniRetiroInput.value = '';
+            }
+        }
+
+        if (evidenciaGroup && evidenciaInput) {
+            if (this.value === 'Entregado') {
+                evidenciaGroup.style.display = 'block';
+                evidenciaInput.required = true;
+            } else {
+                evidenciaGroup.style.display = 'none';
+                evidenciaInput.required = false;
+                evidenciaInput.value = ''; 
             }
         }
     });

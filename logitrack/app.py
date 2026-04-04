@@ -680,10 +680,11 @@ def cambiar_estado(tracking_id):
     transportista = request.form.get("transportista", "").strip() or None
     dni_retiro = request.form.get("dni_retiro", "").strip() 
     
-    # 👇 NUEVOS CAMPOS DE REASIGNACIÓN Y FALLIDA 👇
+    # 👇 NUEVOS CAMPOS 👇
     nuevo_transportista = request.form.get("nuevo_transportista", "").strip()
     motivo_reasignacion = request.form.get("motivo_reasignacion", "").strip()
-    motivo_fallida = request.form.get("motivo_fallida", "").strip() # <-- NUEVO
+    motivo_fallida = request.form.get("motivo_fallida", "").strip() 
+    evidencia = request.files.get("evidencia") # <-- NUEVO: Capturamos el archivo (US-33)
     
     usuario, rol = get_usuario()
     estado_actual = envio["estado"]
@@ -695,7 +696,6 @@ def cambiar_estado(tracking_id):
 
     # =========================================================
     # INTERCEPTOR DE REASIGNACIÓN PURA
-    # Si no cambiaron el estado, pero eligieron otro transportista
     # =========================================================
     if not nuevo_estado and nuevo_transportista and estado_actual == "En tránsito" and rol == "Supervisor":
         if not motivo_reasignacion:
@@ -715,9 +715,7 @@ def cambiar_estado(tracking_id):
         registrar_auditoria(tracking_id, "Reasignación", f"Transportista: '{transportista_anterior}' → '{nuevo_transportista}'. {nota_final}", usuario)
         flash("Transportista reasignado correctamente.", "success")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
-    # =========================================================
 
-    # Si no es reasignación, validamos que haya un estado como siempre
     if not nuevo_estado:
         flash("Debe seleccionar un nuevo estado.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
@@ -727,7 +725,6 @@ def cambiar_estado(tracking_id):
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
     permitido = False
-
     if rol == "Supervisor":
         transitions = {
             "Ingresado": ["Cancelado", "En sucursal", "En tránsito"],
@@ -750,26 +747,35 @@ def cambiar_estado(tracking_id):
         flash("Para pasar a 'En tránsito' debés asignar un transportista.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
-    if estado_actual == "En sucursal" and nuevo_estado == "Entregado" and not dni_retiro:
-        flash("Debe ingresar el DNI de quien retira.", "error")
-        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
-    
-    if dni_retiro:
-        nota = f"Retirado por DNI: {dni_retiro} - {nota}"
+    # ==========================================
+    # US-33: Lógica de Evidencia al Entregar
+    # ==========================================
+    if nuevo_estado == "Entregado":
+        # DNI si es en sucursal
+        if estado_actual == "En sucursal" and not dni_retiro:
+            flash("Debe ingresar el DNI de quien retira.", "error")
+            return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+        if dni_retiro:
+            nota = f"Retirado por DNI: {dni_retiro} - {nota}"
+            
+        # Validación de foto/firma
+        if not evidencia or evidencia.filename == '':
+            flash("Debe adjuntar una evidencia (foto o firma) para marcar como Entregado.", "error")
+            return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+        
+        # Como es un MVP, solo guardamos el nombre del archivo simulando la subida
+        envio["evidencia"] = evidencia.filename
+        nota = f"Evidencia: {evidencia.filename} - {nota}"
 
-    # ==========================================
-    # US-32: Lógica de Visita Fallida y Alerta IA
-    # ==========================================
+    # Lógica de Visita Fallida y Alerta IA
     if nuevo_estado == "Visita Fallida":
-        # 1. Selector Obligatorio
         if not motivo_fallida:
             flash("Para marcar una Visita Fallida debés seleccionar un motivo.", "error")
             return redirect(url_for("detalle_envio", tracking_id=tracking_id))
         
-        # 2. Lógica de IA para "Dirección inexistente"
         if motivo_fallida == "Dirección inexistente":
             flash("⚠️ ALERTA IA - Datos Erróneos: Esta dirección será marcada para revisión.", "warning")
-            envio["alerta_ia"] = "Datos Erróneos"  # Dejamos la marca en el JSON para el futuro
+            envio["alerta_ia"] = "Datos Erróneos"
             
         nota = f"Motivo: {motivo_fallida} - {nota}"
 
