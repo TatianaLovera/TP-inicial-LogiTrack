@@ -39,10 +39,10 @@
     {% if session.usuario %}
     <div class="topbar">
         <button id="sidebar-toggle" class="btn-sidebar-toggle" aria-label="Abrir menú">☰</button>
-        <div class="nav-brand">
+        <a href="{% if session.rol == 'Transportista' %}{{ url_for('hoja_ruta') }}{% elif session.rol == 'Supervisor' %}{{ url_for('panel') }}{% else %}{{ url_for('listar_envios') }}{% endif %}" class="nav-brand" style="text-decoration: none; color: inherit;">
             <span class="brand-icon">◈</span>
             <span class="brand-name">LogiTrack</span>
-        </div>
+        </a>
         <div class="nav-user">
             <button id="theme-toggle" class="btn-theme-toggle" title="Cambiar tema">☀️</button>
             <span class="user-badge">{{ session.rol }}</span>
