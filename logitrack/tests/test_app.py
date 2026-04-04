@@ -859,22 +859,27 @@ def test_transportista_bloqueado_auditoria(client):
 # ==========================================
 
 def test_transportista_cambia_estado_permitido(client):
-    """Prueba AC2 (Camino Feliz): El chofer puede marcar su paquete como Entregado"""
+    """Prueba AC2 (Camino Feliz): El chofer puede marcar su paquete como Entregado con evidencia"""
+    import io
     client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'})
-    
-    # Buscamos en app.py un paquete "En tránsito" asignado a "transportista" (ej: Juan Pérez)
+
     from app import envios
     envio = next(e for e in envios if e["estado"] == "En tránsito" and e.get("transportista") == "transportista")
     tracking = envio["tracking_id"]
-    
-    # El transportista manda el formulario para marcarlo entregado
-    respuesta = client.post(f'/envios/{tracking}/cambiar-estado', 
-                            data={'nuevo_estado': 'Entregado', 'nota': 'Entregado en mano'}, 
+
+    # Agregamos una evidencia simulada porque ahora es obligatoria (US-33)
+    foto = (io.BytesIO(b"foto-test"), "prueba.jpg")
+
+    respuesta = client.post(f'/envios/{tracking}/cambiar-estado',
+                            data={
+                                'nuevo_estado': 'Entregado', 
+                                'nota': 'Entregado en mano',
+                                'evidencia': foto
+                            }, 
+                            content_type='multipart/form-data',
                             follow_redirects=True)
-    texto_html = respuesta.data.decode('utf-8')
     
-    # El sistema debe procesarlo con éxito
-    assert "Estado actualizado a: Entregado" in texto_html
+    assert "Estado actualizado a: Entregado" in respuesta.data.decode('utf-8')
 
 def test_transportista_bloqueado_estado_invalido(client):
     """Prueba AC2 (Hackeo): El chofer intenta pasar su paquete a 'Cancelado'"""
@@ -1523,3 +1528,289 @@ def test_reasignar_transportista_en_mismo_formulario(client):
 
     # Limpiamos el transportista falso
     del USUARIOS["transportista2"]
+
+
+def test_cambio_estado_visita_fallida_con_motivo(client):
+    """Prueba que el transportista pueda marcar Visita Fallida y se guarde el motivo"""
+    from app import envios, cargar_datos_ejemplo
+    envios.clear()
+    cargar_datos_ejemplo()
+
+    # Logueo como transportista
+    client.post('/login', data={'usuario': 'transportista', 'password': 'tra123'}, follow_redirects=True)
+    
+    # Buscamos un paquete que el transportista tenga En tránsito
+    envio = next((e for e in envios if e["estado"] == "En tránsito" and e["transportista"] == "transportista"), None)
+    tracking = envio["tracking_id"]
+    
+    datos_form = {
+        'nuevo_estado': 'Visita Fallida',
+        'motivo_fallida': 'Domicilio cerrado / Nadie responde',
+        'nota': 'Toqué timbre 3 veces y no salió nadie'
+    }
+    
+    respuesta = client.post(f'/envios/{tracking}/cambiar-estado', data=datos_form, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificaciones
+    assert "Estado actualizado a: Visita Fallida" in texto_html
+    assert envio["estado"] == "Visita Fallida"
+    
+    # Verificamos que el motivo se haya inyectado correctamente en el historial
+    historial_reciente = envio["historial"][-1]["nota"]
+    assert "Motivo: Domicilio cerrado / Nadie responde" in historial_reciente
+    assert "Toqué timbre 3 veces" in historial_reciente
+
+def test_script_anonimizar_ley_25326(client):
+    """Prueba que el script de anonimización borre datos de envíos finalizados con >30 días"""
+    from app import envios, ahora
+    import datetime
+    
+    envios.clear()
+    
+    hoy = ahora()
+    hace_40_dias = (hoy - datetime.timedelta(days=40)).strftime("%d/%m/%Y %H:%M")
+    hace_10_dias = (hoy - datetime.timedelta(days=10)).strftime("%d/%m/%Y %H:%M")
+    
+    # 1. Envío Entregado hace más de 30 días (DEBE ANONIMIZARSE)
+    envios.append({
+            "tracking_id": "TEST-VIEJO-1",
+            "estado": "Entregado",
+            "origen": "CABA",
+            "destino": "Córdoba",
+            "fecha_creacion": hace_40_dias,  # <-- AGREGADO
+            "remitente": {"nombre": "Juan Perez", "dni": "111", "direccion": "Calle 1", "telefono": "111", "email": "j@j.com"},
+            "destinatario": {"nombre": "Maria Gomez", "dni": "222", "direccion": "Calle 2", "telefono": "222", "email": "m@m.com"},
+            "historial": [{"estado": "Entregado", "fecha": hace_40_dias}]
+        })
+
+    # 2. Envío Cancelado hace más de 30 días (DEBE ANONIMIZARSE)
+    envios.append({
+            "tracking_id": "TEST-VIEJO-2",
+            "estado": "Cancelado",
+            "origen": "Pilar",
+            "destino": "Tigre",
+            "fecha_creacion": hace_40_dias,  # <-- AGREGADO
+            "remitente": {"nombre": "Carlos Rey", "dni": "333", "direccion": "Calle 3", "telefono": "333", "email": "c@c.com"},
+            "destinatario": {"nombre": "Ana Paz", "dni": "444", "direccion": "Calle 4", "telefono": "444", "email": "a@a.com"},
+            "historial": [{"estado": "Cancelado", "fecha": hace_40_dias}]
+        })
+
+    # 3. Envío Entregado hace MENOS de 30 días (NO DEBE ANONIMIZARSE)
+    envios.append({
+            "tracking_id": "TEST-NUEVO-1",
+            "estado": "Entregado",
+            "origen": "Morón",
+            "destino": "Luján",
+            "fecha_creacion": hace_10_dias,  # <-- AGREGADO
+            "remitente": {"nombre": "Luis Silva", "dni": "555", "direccion": "Calle 5", "telefono": "555", "email": "l@l.com"},
+            "destinatario": {"nombre": "Eva Luna", "dni": "666", "direccion": "Calle 6", "telefono": "666", "email": "e@e.com"},
+            "historial": [{"estado": "Entregado", "fecha": hace_10_dias}]
+        })
+
+    # Logueo como supervisor para tener permisos
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Ejecutar script (botón)
+    respuesta = client.post('/envios/script-anonimizar', follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+    
+    # Verificaciones de los mensajes en pantalla
+    assert "Se anonimizaron 2 envíos" in texto_html
+    
+    # Validar el primer envío (DEBE estar anonimizado y con dirección ofuscada)
+    assert envios[0]["remitente"]["nombre"] == "ANONIMIZADO"
+    assert envios[0]["destinatario"]["dni"] == "ANONIMIZADO"
+    assert envios[0]["remitente"]["direccion"] == "Zona/Localidad: CABA"
+    
+    # Validar el segundo envío (DEBE estar anonimizado)
+    assert envios[1]["remitente"]["nombre"] == "ANONIMIZADO"
+    
+    # Validar el tercer envío (NO DEBE haber sido tocado por el script)
+    assert envios[2]["remitente"]["nombre"] == "Luis Silva"
+    assert envios[2]["destinatario"]["dni"] == "666"
+    assert envios[2]["remitente"]["direccion"] == "Calle 5"
+
+def test_inactividad_sesion_us_28(client):
+    """Prueba la configuración de expiración de sesión por inactividad y persistencia (US-28)"""
+    from app import app
+    import datetime
+
+    # 1. Verificar configuración global del backend (30 min)
+    assert app.permanent_session_lifetime == datetime.timedelta(minutes=30)
+
+    # Hacemos login exitoso (ya no usamos el 'with client' acá afuera)
+    respuesta = client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # 2. Verificar que la sesión activa la persistencia
+    # Usamos session_transaction() para poder leer el estado de la sesión de forma segura
+    with client.session_transaction() as session_activa:
+        assert session_activa.permanent is True
+        assert session_activa.get("usuario") == "supervisor"
+
+    # 3. Verificar que el frontend inyecta el script vigilante
+    texto_html = respuesta.data.decode('utf-8')
+    assert "iniciarControlInactividad()" in texto_html
+    assert "30 * 60 * 1000" in texto_html
+
+def test_logout_y_proteccion_us_27(client):
+    """Prueba el cierre de sesión y la prevención de caché en el navegador (US-27)"""
+    
+    # 1. Logueamos a un usuario válido para abrir la sesión (usamos al supervisor que sabemos que funciona)
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    
+    # Validamos que efectivamente está logueado
+    with client.session_transaction() as session_activa:
+        assert session_activa.get("usuario") == "supervisor"
+
+    # 2. Hacemos la petición de cierre de sesión
+    respuesta_logout = client.get('/logout', follow_redirects=True)
+    
+    # 3. Verificamos que la sesión se haya borrado por completo
+    with client.session_transaction() as session_limpia:
+        assert session_limpia.get("usuario") is None
+        
+    # 4. Verificamos que se inyecten las cabeceras Anti-Caché para bloquear el botón "Atrás"
+    headers = respuesta_logout.headers
+    assert "no-cache" in headers.get("Cache-Control", "")
+    assert "no-store" in headers.get("Cache-Control", "")
+    assert headers.get("Pragma") == "no-cache"
+    assert headers.get("Expires") == "0"
+
+def test_spinner_global_us_25(client):
+    """Prueba la inyección de la estructura y scripts del indicador de carga (US-25)"""
+    
+    # 1. Hacemos un POST al login para que nos redirija a una pantalla interna (que sí hereda de base.html)
+    respuesta = client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'}, follow_redirects=True)
+    texto_html = respuesta.data.decode('utf-8')
+
+    # 2. Verificamos que el contenedor visual del spinner exista en el DOM
+    assert 'id="global-spinner"' in texto_html
+    assert 'class="spinner-circle"' in texto_html
+    assert 'Procesando solicitud...' in texto_html
+
+    # 3. Verificamos que la lógica de JavaScript para interceptar eventos esté presente
+    assert "document.querySelectorAll('form').forEach" in texto_html
+    assert "spinner.style.display = 'flex'" in texto_html
+    assert "btn.disabled = true" in texto_html
+    assert "window.addEventListener('pageshow'" in texto_html
+
+def test_swagger_docs_task_05(client):
+    """Prueba la disponibilidad de la documentación de Swagger (Task-05)"""
+    
+    # 1. Verificar que el archivo YAML se sirve correctamente
+    respuesta_yaml = client.get('/docs/swagger.yaml')
+    assert respuesta_yaml.status_code == 200
+    assert b"openapi: 3.0.0" in respuesta_yaml.data
+    assert b"LogiTrack Mock API" in respuesta_yaml.data
+
+    # 2. Verificar que la interfaz de Swagger UI responde correctamente
+    # Utilizamos follow_redirects=True porque flask-swagger-ui suele redirigir internamente
+    respuesta_ui = client.get('/api-docs', follow_redirects=True)
+    assert respuesta_ui.status_code == 200
+    # Verificamos que el HTML generado contenga la palabra clave de la interfaz
+    assert b"swagger-ui" in respuesta_ui.data.lower()
+
+def test_visita_fallida_us_32(client):
+    """Prueba la validación y alerta IA del motivo de Visita Fallida (US-32)"""
+    from app import envios, ahora_str
+    
+    # 1. Inyectamos un envío artificial robusto para aislar la prueba.
+    tracking_id_prueba = "TEST-US32-FALLIDA"
+    envio_dummy = {
+        "tracking_id": tracking_id_prueba,
+        "estado": "En tránsito",
+        "transportista": "transportista",
+        "fecha_creacion": ahora_str(),
+        "remitente": {"nombre": "Test R", "dni": "111", "direccion": "A", "telefono": "1", "email": "a@a.com"},
+        "destinatario": {"nombre": "Test D", "dni": "222", "direccion": "B", "telefono": "2", "email": "b@b.com"},
+        "origen": "A",
+        "destino": "B",
+        "peso": "1",
+        "dimensiones": "1x1x1",
+        "descripcion": "Envio de prueba",
+        "historial": []
+    }
+    envios.append(envio_dummy)
+
+    # 2. Logueamos al supervisor para tener permisos de cambiar estados
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+
+    # 3. Prueba A: Validar que el motivo sea obligatorio
+    respuesta_error = client.post(f'/envios/{tracking_id_prueba}/cambiar-estado', data={
+        'nuevo_estado': 'Visita Fallida',
+        'motivo_fallida': ''  # Lo mandamos vacío a propósito
+    }, follow_redirects=True)
+    texto_error = respuesta_error.data.decode('utf-8')
+    assert "debés seleccionar un motivo" in texto_error
+
+    # 4. Prueba B: Validar la Alerta IA al usar 'Dirección inexistente'
+    respuesta_exito = client.post(f'/envios/{tracking_id_prueba}/cambiar-estado', data={
+        'nuevo_estado': 'Visita Fallida',
+        'motivo_fallida': 'Dirección inexistente'
+    }, follow_redirects=True)
+    texto_exito = respuesta_exito.data.decode('utf-8')
+    
+    # Verificamos los mensajes Flash en el HTML
+    assert "Estado actualizado a: Visita Fallida" in texto_exito
+    assert "ALERTA IA - Datos Erróneos" in texto_exito
+
+def test_evidencia_entrega_us_33(client):
+    """Prueba la obligatoriedad y almacenamiento de evidencia digital (US-33)"""
+    from app import envios, ahora_str
+    import io
+
+    tracking_id = "TEST-US33-EVIDENCIA"
+    # Completamos el objeto con datos de remitente/destinatario para evitar UndefinedError en la vista
+    envio_test = {
+        "tracking_id": tracking_id,
+        "estado": "En sucursal",
+        "transportista": "transportista",
+        "fecha_creacion": ahora_str(),
+        "remitente": {"nombre": "R", "dni": "1", "direccion": "D", "telefono": "1", "email": "r@test.com"},
+        "destinatario": {"nombre": "D", "dni": "2", "direccion": "E", "telefono": "2", "email": "d@test.com"},
+        "historial": []
+    }
+    envios.append(envio_test)
+
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+
+    # 1. Intentar sin archivo (Debe fallar)
+    res_error = client.post(f'/envios/{tracking_id}/cambiar-estado', data={
+        'nuevo_estado': 'Entregado',
+        'dni_retiro': '12345678'
+    }, follow_redirects=True)
+    assert "Debe adjuntar una evidencia" in res_error.data.decode('utf-8')
+
+    # 2. Con archivo (Éxito)
+    foto_simulada = (io.BytesIO(b"foto"), "entrega.jpg")
+    res_exito = client.post(f'/envios/{tracking_id}/cambiar-estado', data={
+        'nuevo_estado': 'Entregado',
+        'dni_retiro': '12345678',
+        'evidencia': foto_simulada
+    }, content_type='multipart/form-data', follow_redirects=True)
+    
+    assert "Estado actualizado a: Entregado" in res_exito.data.decode('utf-8')
+
+def test_restriccion_visibilidad_evidencia_us_33(client):
+    """Prueba que el Operador no vea la evidencia si el envío no está entregado (US-33)"""
+    from app import envios, ahora_str
+    
+    # Creamos un envío que tiene una evidencia (por error o carga previa) pero sigue en tránsito
+    tracking_id = "TEST-US33-PRIVACIDAD"
+    envios.append({
+        "tracking_id": tracking_id,
+        "estado": "En tránsito",
+        "evidencia": "foto_secreta.jpg",
+        "fecha_creacion": ahora_str(),
+        "remitente": {"nombre": "R"}, "destinatario": {"nombre": "D"},
+        "historial": []
+    })
+
+    # Login como Operador
+    client.post('/login', data={'usuario': 'operador', 'password': 'op123'})
+
+    # El Operador entra al detalle
+    res = client.get(f'/envios/{tracking_id}')
+    # No debería ver el nombre del archivo de evidencia
+    assert "foto_secreta.jpg" not in res.data.decode('utf-8')

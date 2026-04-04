@@ -7,7 +7,14 @@
         <h1 class="page-title">Envíos</h1>
         <p class="page-subtitle">{{ total_items }} envío(s) · 10 por página</p>
     </div>
-    <a href="{{ url_for('nuevo_envio') }}" class="btn btn-primary">+ Nuevo Envío</a>
+    <div style="display: flex; gap: 10px; align-items: center;">
+        {% if rol == 'Supervisor' %}
+        <form method="POST" action="{{ url_for('script_anonimizar') }}" style="margin: 0;">
+            <button type="submit" class="btn btn-secondary" title="Ejecutar script de minimización de datos">🔒 Ejecutar Ley 25.326</button>
+        </form>
+        {% endif %}
+        <a href="{{ url_for('nuevo_envio') }}" class="btn btn-primary">+ Nuevo Envío</a>
+    </div>
 </div>
 
 <form method="GET" action="{{ url_for('listar_envios') }}" class="search-form" id="search-form">

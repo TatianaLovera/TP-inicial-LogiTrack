@@ -5,8 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}LogiTrack{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <style>
+        #global-spinner {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.7); /* Fondo oscuro semitransparente */
+            z-index: 99999; /* Por encima de todo */
+            display: none; /* Oculto por defecto */
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: #fff;
+            backdrop-filter: blur(3px);
+        }
+        .spinner-circle {
+            width: 50px; height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top: 4px solid var(--primary, #3b82f6);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </head>
 <body>
+    <div id="global-spinner">
+        <div class="spinner-circle"></div>
+        <p style="font-weight: bold; letter-spacing: 1px;">Procesando solicitud...</p>
+    </div>
+
     {% if session.usuario %}
     <div class="topbar">
         <button id="sidebar-toggle" class="btn-sidebar-toggle" aria-label="Abrir menú">☰</button>
@@ -67,5 +96,68 @@
     {% endif %}
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% block scripts %}{% endblock %}
+
+    {% if session.usuario %}
+    <script>
+        function iniciarControlInactividad() {
+            let temporizador;
+            const limiteInactividad = 30 * 60 * 1000;
+
+            function cerrarSesion() {
+                localStorage.removeItem('ultima_actividad');
+                window.location.href = "{{ url_for('logout') }}";
+            }
+
+            function resetearTemporizador() {
+                clearTimeout(temporizador);
+                localStorage.setItem('ultima_actividad', Date.now());
+                temporizador = setTimeout(cerrarSesion, limiteInactividad);
+            }
+
+            window.onload = resetearTemporizador;
+            document.onmousemove = resetearTemporizador;
+            document.onkeypress = resetearTemporizador;
+            document.onclick = resetearTemporizador;
+            document.onscroll = resetearTemporizador;
+        }
+        iniciarControlInactividad();
+    </script>
+    {% endif %}
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const spinner = document.getElementById('global-spinner');
+
+            // 1. Interceptar TODOS los formularios (Login, Nuevo Envío, Cambios de Estado, Filtros)
+            document.querySelectorAll('form').forEach(form => {
+                form.addEventListener('submit', function() {
+                    spinner.style.display = 'flex'; // Muestra el spinner
+                    
+                    // Bloqueo de Interacciones: Evitar doble clic
+                    const btn = form.querySelector('button[type="submit"]');
+                    if (btn) {
+                        setTimeout(() => { btn.disabled = true; }, 10);
+                    }
+                });
+            });
+
+            // 2. Interceptar botones y enlaces que desencadenan carga (Paginación, Ordenamiento)
+            document.querySelectorAll('.tabla th a, .pagination a, .btn').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    const href = link.getAttribute('href');
+                    // Solo activar si no está deshabilitado y es un enlace válido
+                    if (!link.classList.contains('disabled') && href && href !== '#') {
+                        spinner.style.display = 'flex';
+                    }
+                });
+            });
+        });
+
+        // Recuperación Inmediata: Ocultar spinner y rehabilitar botones si se carga la página desde el caché del navegador (Bfcache)
+        window.addEventListener('pageshow', function() {
+            document.getElementById('global-spinner').style.display = 'none';
+            document.querySelectorAll('button[type="submit"]').forEach(btn => btn.disabled = false);
+        });
+    </script>
 </body>
 </html>

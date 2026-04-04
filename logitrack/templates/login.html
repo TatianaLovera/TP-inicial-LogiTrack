@@ -41,5 +41,9 @@
             </div>
         </div>
     </div>
+    <script>
+    // US-27: Limpiamos datos locales de sesión al llegar al login
+    localStorage.removeItem('ultima_actividad');
+    </script>
 </body>
 </html>

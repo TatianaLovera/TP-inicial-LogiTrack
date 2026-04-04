@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from flask import jsonify
+from flask import send_from_directory
+from flask_swagger_ui import get_swaggerui_blueprint
 import uuid
 import datetime
 import joblib
@@ -10,6 +12,14 @@ import pandas as pd
 
 app = Flask(__name__)
 app.secret_key = "logitrack-secret-2024"
+app.permanent_session_lifetime = datetime.timedelta(minutes=30)
+@app.after_request
+def evitar_cache_navegador(response):
+    """US-27: Previene que el botón 'Atrás' muestre páginas protegidas cacheadas"""
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 envios = []
 audit_logs = []
@@ -187,6 +197,7 @@ def login():
         usuario = request.form.get("usuario", "").strip()
         password = request.form.get("password", "").strip()
         if usuario in USUARIOS and USUARIOS[usuario]["password"] == password:
+            session.permanent = True  # <-- NUEVO: Activa el temporizador de inactividad
             session["usuario"] = usuario
             session["rol"] = USUARIOS[usuario]["rol"]
             flash(f"Bienvenido, {usuario} ({USUARIOS[usuario]['rol']})", "success")
@@ -601,6 +612,58 @@ def editar_envio(tracking_id):
 
     return render_template("editar_envio.html", envio=envio, **get_usuario_context())
 
+@app.route("/envios/script-anonimizar", methods=["POST"])
+@role_required("Supervisor")
+def script_anonimizar():
+    usuario_actual, _ = get_usuario()
+    hoy = ahora()
+    modificados = 0
+    
+    # Definimos los estados finales según la política de la empresa
+    ESTADOS_FINALES = ["Cancelado", "Entregado", "Entregado a remitente"]
+
+    for envio in envios:
+        # Solo procesamos si el estado actual es uno de los finales
+        if envio["estado"] in ESTADOS_FINALES:
+            
+            # Buscamos el último evento en el historial que coincida con un estado final
+            evento_cierre = next((h for h in reversed(envio["historial"]) if h["estado"] in ESTADOS_FINALES), None)
+            
+            if evento_cierre:
+                fecha_cierre = datetime.datetime.strptime(evento_cierre["fecha"], "%d/%m/%Y %H:%M")
+                
+                # Si pasaron más de 30 días desde que se cerró el ciclo
+                if (hoy - fecha_cierre).days > 30:
+                    # 1. Anonimización de datos de contacto
+                    envio["remitente"].update({
+                        "nombre": "ANONIMIZADO",
+                        "dni": "ANONIMIZADO",
+                        "telefono": "ANONIMIZADO",
+                        "email": "ANONIMIZADO"
+                    })
+                    
+                    envio["destinatario"].update({
+                        "nombre": "ANONIMIZADO",
+                        "dni": "ANONIMIZADO",
+                        "telefono": "ANONIMIZADO",
+                        "email": "ANONIMIZADO"
+                    })
+
+                    # 2. Ofuscación de dirección exacta (conservamos localidad para la IA)
+                    envio["remitente"]["direccion"] = f"Zona/Localidad: {envio['origen']}"
+                    envio["destinatario"]["direccion"] = f"Zona/Localidad: {envio['destino']}"
+
+                    # 3. Auditoría del proceso
+                    registrar_auditoria(envio["tracking_id"], "Edición", f"Anonimización automática (Estado: {envio['estado']} > 30 días).", "sistema")
+                    modificados += 1
+
+    if modificados > 0:
+        flash(f"Éxito: Se anonimizaron {modificados} envíos en estado final con antigüedad mayor a 30 días.", "success")
+    else:
+        flash("No se encontraron envíos finalizados que requieran anonimización hoy.", "info")
+        
+    return redirect(url_for("listar_envios"))
+
 
 @app.route("/envios/<tracking_id>/cambiar-estado", methods=["POST"])
 def cambiar_estado(tracking_id):
@@ -617,9 +680,11 @@ def cambiar_estado(tracking_id):
     transportista = request.form.get("transportista", "").strip() or None
     dni_retiro = request.form.get("dni_retiro", "").strip() 
     
-    # 👇 NUEVOS CAMPOS DE REASIGNACIÓN 👇
+    # 👇 NUEVOS CAMPOS 👇
     nuevo_transportista = request.form.get("nuevo_transportista", "").strip()
     motivo_reasignacion = request.form.get("motivo_reasignacion", "").strip()
+    motivo_fallida = request.form.get("motivo_fallida", "").strip() 
+    evidencia = request.files.get("evidencia") # <-- NUEVO: Capturamos el archivo (US-33)
     
     usuario, rol = get_usuario()
     estado_actual = envio["estado"]
@@ -630,8 +695,7 @@ def cambiar_estado(tracking_id):
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
     # =========================================================
-    # 👇 INTERCEPTOR DE REASIGNACIÓN PURA 👇
-    # Si no cambiaron el estado, pero eligieron otro transportista
+    # INTERCEPTOR DE REASIGNACIÓN PURA
     # =========================================================
     if not nuevo_estado and nuevo_transportista and estado_actual == "En tránsito" and rol == "Supervisor":
         if not motivo_reasignacion:
@@ -651,9 +715,7 @@ def cambiar_estado(tracking_id):
         registrar_auditoria(tracking_id, "Reasignación", f"Transportista: '{transportista_anterior}' → '{nuevo_transportista}'. {nota_final}", usuario)
         flash("Transportista reasignado correctamente.", "success")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
-    # =========================================================
 
-    # Si no es reasignación, validamos que haya un estado como siempre
     if not nuevo_estado:
         flash("Debe seleccionar un nuevo estado.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
@@ -663,7 +725,6 @@ def cambiar_estado(tracking_id):
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
     permitido = False
-
     if rol == "Supervisor":
         transitions = {
             "Ingresado": ["Cancelado", "En sucursal", "En tránsito"],
@@ -686,12 +747,37 @@ def cambiar_estado(tracking_id):
         flash("Para pasar a 'En tránsito' debés asignar un transportista.", "error")
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
-    if estado_actual == "En sucursal" and nuevo_estado == "Entregado" and not dni_retiro:
-        flash("Debe ingresar el DNI de quien retira.", "error")
-        return redirect(url_for("detalle_envio", tracking_id=tracking_id))
-    
-    if dni_retiro:
-        nota = f"Retirado por DNI: {dni_retiro} - {nota}"
+    # ==========================================
+    # US-33: Lógica de Evidencia al Entregar
+    # ==========================================
+    if nuevo_estado == "Entregado":
+        # DNI si es en sucursal
+        if estado_actual == "En sucursal" and not dni_retiro:
+            flash("Debe ingresar el DNI de quien retira.", "error")
+            return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+        if dni_retiro:
+            nota = f"Retirado por DNI: {dni_retiro} - {nota}"
+            
+        # Validación de foto/firma
+        if not evidencia or evidencia.filename == '':
+            flash("Debe adjuntar una evidencia (foto o firma) para marcar como Entregado.", "error")
+            return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+        
+        # Como es un MVP, solo guardamos el nombre del archivo simulando la subida
+        envio["evidencia"] = evidencia.filename
+        nota = f"Evidencia: {evidencia.filename} - {nota}"
+
+    # Lógica de Visita Fallida y Alerta IA
+    if nuevo_estado == "Visita Fallida":
+        if not motivo_fallida:
+            flash("Para marcar una Visita Fallida debés seleccionar un motivo.", "error")
+            return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+        
+        if motivo_fallida == "Dirección inexistente":
+            flash("⚠️ ALERTA IA - Datos Erróneos: Esta dirección será marcada para revisión.", "warning")
+            envio["alerta_ia"] = "Datos Erróneos"
+            
+        nota = f"Motivo: {motivo_fallida} - {nota}"
 
     if transportista:
         envio["transportista"] = transportista
@@ -827,7 +913,13 @@ def cargar_datos_ejemplo():
          "Neuquén", "Bariloche", "Accesorios", "1.8", "25x20x12 cm", "Ingresado", None, False),
     ]
     for i, (rem_nom, rem_dni, rem_dir, rem_tel, rem_email, dest_nom, dest_dni, dest_dir, dest_tel, dest_email, orig, dst, desc, peso, dim, estado, transportista, envio_express) in enumerate(ejemplos):
-        fecha_dt = ahora() - datetime.timedelta(days=min(i, 6), hours=i)
+        
+        # Simulamos envíos antiguos para probar la Ley 25.326:
+        # i=2 (Entregado), i=4 (Cancelado), i=7 (Entregado a remitente)
+        if i in [2, 4, 7]:
+            fecha_dt = ahora() - datetime.timedelta(days=35)
+        else:
+            fecha_dt = ahora() - datetime.timedelta(days=min(i, 6), hours=i)
         fecha = fecha_dt.strftime("%d/%m/%Y %H:%M")
         tracking = generar_tracking_id()
         nuevo = {
@@ -869,6 +961,28 @@ def cargar_datos_ejemplo():
 def page_not_found(e):
     # Forzamos el renderizado de tu archivo
     return render_template('404.html'), 404
+
+# ==========================================
+# CONFIGURACIÓN SWAGGER / OPENAPI (Task-05)
+# ==========================================
+
+# 1. Creamos la ruta para que Swagger pueda leer el YAML que tenés en la carpeta "docs"
+@app.route('/docs/swagger.yaml')
+def swagger_yaml():
+    return send_from_directory('docs', 'swagger.yaml')
+
+# 2. Configuramos la interfaz gráfica en /api-docs
+SWAGGER_URL = '/api-docs'
+API_URL = '/docs/swagger.yaml' 
+
+swaggerui_blueprint = get_swaggerui_blueprint(
+    SWAGGER_URL,
+    API_URL,
+    config={
+        'app_name': "LogiTrack Mock API"
+    }
+)
+app.register_blueprint(swaggerui_blueprint)
 
 # ==========================================
 # MOCK API RESTFUL (Devuelve JSON puro)
