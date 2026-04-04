@@ -31,6 +31,7 @@ paths:
                     type: array
                     items:
                       type: object
+
   /envios/{tracking_id}:
     get:
       summary: Obtener detalle de un envío
@@ -46,3 +47,81 @@ paths:
           description: Envío encontrado
         '404':
           description: Envío no encontrado
+
+  /predecir:
+    post:
+      summary: Predecir prioridad (Machine Learning)
+      description: Evalúa los datos del envío y devuelve una prioridad sugerida mediante el modelo de IA.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                distancia_km:
+                  type: number
+                  example: 120.5
+                peso_kg:
+                  type: number
+                  example: 2.5
+                es_express:
+                  type: integer
+                  example: 1
+      responses:
+        '200':
+          description: Predicción exitosa con la prioridad calculada
+        '500':
+          description: Error interno del modelo
+
+  /envios/nuevo:
+    post:
+      summary: Crear un nuevo envío
+      description: Endpoint para dar de alta un envío logístico en la base de datos simulada.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                origen:
+                  type: string
+                  example: "CABA"
+                destino:
+                  type: string
+                  example: "Córdoba"
+                peso:
+                  type: string
+                  example: "2.5"
+      responses:
+        '201':
+          description: Envío creado exitosamente
+
+  /envios/{tracking_id}/cambiar-estado:
+    post:
+      summary: Actualizar estado de un envío
+      description: Actualiza la fase logística del paquete (ej. de Ingresado a En tránsito).
+      parameters:
+        - in: path
+          name: tracking_id
+          required: true
+          schema:
+            type: string
+          description: Tracking ID único del paquete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nuevo_estado:
+                  type: string
+                  example: "En tránsito"
+                nota:
+                  type: string
+                  example: "Saliendo de sucursal origen"
+      responses:
+        '200':
+          description: Estado actualizado correctamente

@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from flask import jsonify
+from flask import send_from_directory
+from flask_swagger_ui import get_swaggerui_blueprint
 import uuid
 import datetime
 import joblib
@@ -941,6 +943,28 @@ def cargar_datos_ejemplo():
 def page_not_found(e):
     # Forzamos el renderizado de tu archivo
     return render_template('404.html'), 404
+
+# ==========================================
+# CONFIGURACIÓN SWAGGER / OPENAPI (Task-05)
+# ==========================================
+
+# 1. Creamos la ruta para que Swagger pueda leer el YAML que tenés en la carpeta "docs"
+@app.route('/docs/swagger.yaml')
+def swagger_yaml():
+    return send_from_directory('docs', 'swagger.yaml')
+
+# 2. Configuramos la interfaz gráfica en /api-docs
+SWAGGER_URL = '/api-docs'
+API_URL = '/docs/swagger.yaml' 
+
+swaggerui_blueprint = get_swaggerui_blueprint(
+    SWAGGER_URL,
+    API_URL,
+    config={
+        'app_name': "LogiTrack Mock API"
+    }
+)
+app.register_blueprint(swaggerui_blueprint)
 
 # ==========================================
 # MOCK API RESTFUL (Devuelve JSON puro)
