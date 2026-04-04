@@ -1844,3 +1844,25 @@ def test_privacidad_lista_envios_supervisor(client):
     # 4. Verificaciones
     assert "Juan Privacidad" in html_lista, "El envío debería aparecer en la lista"
     assert dni_unico not in html_lista, f"¡ALERTA! El DNI {dni_unico} es visible en la tabla general."
+
+def test_validacion_cuit_cuil_empresas():
+    """Prueba la nueva validación de CUIT/CUIL con Módulo 11 y soporte de guiones."""
+    from app import validar_dni
+
+    # 1. CUITs de Empresa Válidos (Matemáticamente correctos para el Módulo 11)
+    # Ejemplo de cálculo válido: 30-50000000-3
+    assert validar_dni("30-50000000-3") is True, "Debe aceptar un CUIT válido con guiones"
+    assert validar_dni("30500000003") is True, "Debe aceptar un CUIT válido sin guiones"
+
+    # 2. CUITs Inválidos (Falla el dígito verificador)
+    assert validar_dni("30-50000000-4") is False, "Debe rechazar un CUIT con el dígito final incorrecto"
+    
+    # 3. CUITs Inválidos (Prefijo no permitido, ej: 99 no existe en AFIP)
+    assert validar_dni("99-50000000-3") is False, "Debe rechazar prefijos que no correspondan a CUIT/CUIL"
+
+    # 4. Prueba de Regresión (Asegurar que los DNI viejos siguen funcionando)
+    assert validar_dni("35000000") is True, "Debe seguir aceptando DNIs normales de 8 dígitos"
+    assert validar_dni("65000000") is False, "Debe seguir rechazando DNIs en la franja del salto administrativo"
+    
+    # 5. Formatos extraños
+    assert validar_dni("30-5000A000-3") is False, "Debe rechazar si contiene letras"

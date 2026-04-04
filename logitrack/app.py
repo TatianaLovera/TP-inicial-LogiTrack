@@ -9,6 +9,7 @@ import random
 import re
 from math import ceil
 import pandas as pd
+import re
 
 app = Flask(__name__)
 app.secret_key = "logitrack-secret-2024"
@@ -92,11 +93,38 @@ def puede_editar_envio(envio):
 
 
 def validar_dni(dni):
-    """Valida que el DNI pertenezca a rangos válidos, excluyendo el salto administrativo."""
-    if not bool(re.match(r"^\d+$", dni)):
+    """Valida que el DNI pertenezca a rangos válidos, excluyendo el salto administrativo.
+       También acepta formatos CUIT/CUIL (11 dígitos) aplicando el algoritmo Módulo 11."""
+       
+    # Limpiamos posibles guiones por si ingresan un CUIT con formato XX-XXXXXXXX-X
+    dni_limpio = str(dni).replace("-", "").strip()
+
+    if not bool(re.match(r"^\d+$", dni_limpio)):
         return False
         
-    dni_num = int(dni)
+    # 👇 NUEVO: Si tiene 11 dígitos, aplicamos validación oficial de AFIP (CUIT/CUIL)
+    if len(dni_limpio) == 11:
+        prefijo = dni_limpio[:2]
+        # Prefijos válidos: 30, 33, 34 (Empresas/ONGs) y 20, 23, 24, 27 (Personas)
+        if prefijo not in ["20", "23", "24", "27", "30", "33", "34"]:
+            return False
+            
+        multiplicadores = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
+        suma = sum(int(dni_limpio[i]) * multiplicadores[i] for i in range(10))
+        resto = suma % 11
+        
+        verificador_calculado = 11 - resto
+        if verificador_calculado == 11:
+            verificador_calculado = 0
+        elif verificador_calculado == 10:
+            verificador_calculado = 9
+            
+        return verificador_calculado == int(dni_limpio[10])
+
+    # ==============================================================
+    # 👇 LÓGICA ORIGINAL INTACTA (Para DNI de 7 u 8 dígitos) 👇
+    # ==============================================================
+    dni_num = int(dni_limpio)
     
     # Argentinos nativos (antes del salto administrativo)
     es_nativo_1 = 1500000 <= dni_num <= 59999999
