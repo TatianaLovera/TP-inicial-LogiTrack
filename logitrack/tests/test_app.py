@@ -1689,3 +1689,63 @@ def test_spinner_global_us_25(client):
     assert "spinner.style.display = 'flex'" in texto_html
     assert "btn.disabled = true" in texto_html
     assert "window.addEventListener('pageshow'" in texto_html
+
+def test_swagger_docs_task_05(client):
+    """Prueba la disponibilidad de la documentación de Swagger (Task-05)"""
+    
+    # 1. Verificar que el archivo YAML se sirve correctamente
+    respuesta_yaml = client.get('/docs/swagger.yaml')
+    assert respuesta_yaml.status_code == 200
+    assert b"openapi: 3.0.0" in respuesta_yaml.data
+    assert b"LogiTrack Mock API" in respuesta_yaml.data
+
+    # 2. Verificar que la interfaz de Swagger UI responde correctamente
+    # Utilizamos follow_redirects=True porque flask-swagger-ui suele redirigir internamente
+    respuesta_ui = client.get('/api-docs', follow_redirects=True)
+    assert respuesta_ui.status_code == 200
+    # Verificamos que el HTML generado contenga la palabra clave de la interfaz
+    assert b"swagger-ui" in respuesta_ui.data.lower()
+
+def test_visita_fallida_us_32(client):
+    """Prueba la validación y alerta IA del motivo de Visita Fallida (US-32)"""
+    from app import envios, ahora_str
+    
+    # 1. Inyectamos un envío artificial robusto para aislar la prueba.
+    tracking_id_prueba = "TEST-US32-FALLIDA"
+    envio_dummy = {
+        "tracking_id": tracking_id_prueba,
+        "estado": "En tránsito",
+        "transportista": "transportista",
+        "fecha_creacion": ahora_str(),
+        "remitente": {"nombre": "Test R", "dni": "111", "direccion": "A", "telefono": "1", "email": "a@a.com"},
+        "destinatario": {"nombre": "Test D", "dni": "222", "direccion": "B", "telefono": "2", "email": "b@b.com"},
+        "origen": "A",
+        "destino": "B",
+        "peso": "1",
+        "dimensiones": "1x1x1",
+        "descripcion": "Envio de prueba",
+        "historial": []
+    }
+    envios.append(envio_dummy)
+
+    # 2. Logueamos al supervisor para tener permisos de cambiar estados
+    client.post('/login', data={'usuario': 'supervisor', 'password': 'sup123'})
+
+    # 3. Prueba A: Validar que el motivo sea obligatorio
+    respuesta_error = client.post(f'/envios/{tracking_id_prueba}/cambiar-estado', data={
+        'nuevo_estado': 'Visita Fallida',
+        'motivo_fallida': ''  # Lo mandamos vacío a propósito
+    }, follow_redirects=True)
+    texto_error = respuesta_error.data.decode('utf-8')
+    assert "debés seleccionar un motivo" in texto_error
+
+    # 4. Prueba B: Validar la Alerta IA al usar 'Dirección inexistente'
+    respuesta_exito = client.post(f'/envios/{tracking_id_prueba}/cambiar-estado', data={
+        'nuevo_estado': 'Visita Fallida',
+        'motivo_fallida': 'Dirección inexistente'
+    }, follow_redirects=True)
+    texto_exito = respuesta_exito.data.decode('utf-8')
+    
+    # Verificamos los mensajes Flash en el HTML
+    assert "Estado actualizado a: Visita Fallida" in texto_exito
+    assert "ALERTA IA - Datos Erróneos" in texto_exito

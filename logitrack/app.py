@@ -757,8 +757,20 @@ def cambiar_estado(tracking_id):
     if dni_retiro:
         nota = f"Retirado por DNI: {dni_retiro} - {nota}"
 
-    # 👇 NUEVO: Incorporar el motivo de falla a la nota 👇
-    if nuevo_estado == "Visita Fallida" and motivo_fallida:
+    # ==========================================
+    # US-32: Lógica de Visita Fallida y Alerta IA
+    # ==========================================
+    if nuevo_estado == "Visita Fallida":
+        # 1. Selector Obligatorio
+        if not motivo_fallida:
+            flash("Para marcar una Visita Fallida debés seleccionar un motivo.", "error")
+            return redirect(url_for("detalle_envio", tracking_id=tracking_id))
+        
+        # 2. Lógica de IA para "Dirección inexistente"
+        if motivo_fallida == "Dirección inexistente":
+            flash("⚠️ ALERTA IA - Datos Erróneos: Esta dirección será marcada para revisión.", "warning")
+            envio["alerta_ia"] = "Datos Erróneos"  # Dejamos la marca en el JSON para el futuro
+            
         nota = f"Motivo: {motivo_fallida} - {nota}"
 
     if transportista:
