@@ -9,6 +9,7 @@ import random
 import re
 from math import ceil
 import pandas as pd
+import re
 
 app = Flask(__name__)
 app.secret_key = "logitrack-secret-2024"
@@ -92,11 +93,38 @@ def puede_editar_envio(envio):
 
 
 def validar_dni(dni):
-    """Valida que el DNI pertenezca a rangos válidos, excluyendo el salto administrativo."""
-    if not bool(re.match(r"^\d+$", dni)):
+    """Valida que el DNI pertenezca a rangos válidos, excluyendo el salto administrativo.
+       También acepta formatos CUIT/CUIL (11 dígitos) aplicando el algoritmo Módulo 11."""
+       
+    # Limpiamos posibles guiones por si ingresan un CUIT con formato XX-XXXXXXXX-X
+    dni_limpio = str(dni).replace("-", "").strip()
+
+    if not bool(re.match(r"^\d+$", dni_limpio)):
         return False
         
-    dni_num = int(dni)
+    # 👇 NUEVO: Si tiene 11 dígitos, aplicamos validación oficial de AFIP (CUIT/CUIL)
+    if len(dni_limpio) == 11:
+        prefijo = dni_limpio[:2]
+        # Prefijos válidos: 30, 33, 34 (Empresas/ONGs) y 20, 23, 24, 27 (Personas)
+        if prefijo not in ["20", "23", "24", "27", "30", "33", "34"]:
+            return False
+            
+        multiplicadores = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
+        suma = sum(int(dni_limpio[i]) * multiplicadores[i] for i in range(10))
+        resto = suma % 11
+        
+        verificador_calculado = 11 - resto
+        if verificador_calculado == 11:
+            verificador_calculado = 0
+        elif verificador_calculado == 10:
+            verificador_calculado = 9
+            
+        return verificador_calculado == int(dni_limpio[10])
+
+    # ==============================================================
+    # 👇 LÓGICA ORIGINAL INTACTA (Para DNI de 7 u 8 dígitos) 👇
+    # ==============================================================
+    dni_num = int(dni_limpio)
     
     # Argentinos nativos (antes del salto administrativo)
     es_nativo_1 = 1500000 <= dni_num <= 59999999
@@ -748,24 +776,20 @@ def cambiar_estado(tracking_id):
         return redirect(url_for("detalle_envio", tracking_id=tracking_id))
 
     # ==========================================
-    # US-33: Lógica de Evidencia al Entregar
+    # Lógica de Entrega (Modificada)
     # ==========================================
     if nuevo_estado == "Entregado":
-        # DNI si es en sucursal
-        if estado_actual == "En sucursal" and not dni_retiro:
-            flash("Debe ingresar el DNI de quien retira.", "error")
+        # DNI ahora es obligatorio en CUALQUIER tipo de entrega
+        if not dni_retiro:
+            flash("Debe ingresar el DNI de la persona que recibe el paquete.", "error")
             return redirect(url_for("detalle_envio", tracking_id=tracking_id))
-        if dni_retiro:
-            nota = f"Retirado por DNI: {dni_retiro} - {nota}"
             
-        # Validación de foto/firma
-        if not evidencia or evidencia.filename == '':
-            flash("Debe adjuntar una evidencia (foto o firma) para marcar como Entregado.", "error")
-            return redirect(url_for("detalle_envio", tracking_id=tracking_id))
-        
-        # Como es un MVP, solo guardamos el nombre del archivo simulando la subida
-        envio["evidencia"] = evidencia.filename
-        nota = f"Evidencia: {evidencia.filename} - {nota}"
+        nota = f"Recibido por DNI: {dni_retiro} - {nota}"
+            
+        # Validación de foto/firma (AHORA ES OPCIONAL)
+        if evidencia and evidencia.filename != '':
+            envio["evidencia"] = evidencia.filename
+            nota = f"Evidencia: {evidencia.filename} - {nota}"
 
     # Lógica de Visita Fallida y Alerta IA
     if nuevo_estado == "Visita Fallida":
@@ -910,52 +934,83 @@ def cargar_datos_ejemplo():
          "Santa Fe", "Paraná", "Juguetes", "2.7", "28x25x18 cm", "En tránsito", "transportista", False),
         ("ACME", "27444555666", "Av. Argentina 1234, Neuquén", "299-888-9999", "contacto@acme.com",
          "Julia Mora", "88776655", "Calle Mitre 678, Bariloche", "294-444-5566", "julia@email.com",
-         "Neuquén", "Bariloche", "Accesorios", "1.8", "25x20x12 cm", "Ingresado", None, False),
+         "Neuquén", "Bariloche", "Accesorios", "1.8", "25x20x12 cm", "Ingresado", None,True),
     ]
+    
     for i, (rem_nom, rem_dni, rem_dir, rem_tel, rem_email, dest_nom, dest_dni, dest_dir, dest_tel, dest_email, orig, dst, desc, peso, dim, estado, transportista, envio_express) in enumerate(ejemplos):
         
-        # Simulamos envíos antiguos para probar la Ley 25.326:
-        # i=2 (Entregado), i=4 (Cancelado), i=7 (Entregado a remitente)
+        # 1. Fechas simuladas
         if i in [2, 4, 7]:
             fecha_dt = ahora() - datetime.timedelta(days=35)
         else:
             fecha_dt = ahora() - datetime.timedelta(days=min(i, 6), hours=i)
+        
         fecha = fecha_dt.strftime("%d/%m/%Y %H:%M")
         tracking = generar_tracking_id()
+        
+        # 2. Conversiones necesarias para la IA
+        peso_num = float(peso)
+        express_int = 1 if envio_express else 0
+        distancia_simulada = 50.0 + (i * 45.0) # Distancia mockeada para los ejemplos
+        
+        # 3. Lógica de IA usando tu modelo real (Fallback a "Normal" si falla)
+        prioridad_ia = "Normal"
+        if modelo_ia:
+            try:
+                datos_para_ia = pd.DataFrame(
+                    [[distancia_simulada, peso_num, express_int]], 
+                    columns=['distancia_km', 'peso_kg', 'es_express']
+                )
+                prediccion = modelo_ia.predict(datos_para_ia)
+                prioridad_ia = prediccion[0]
+            except Exception as e:
+                print(f"Aviso IA: Fallo en semilla {tracking} - {e}")
+
+        # 4. Historial Lógico
+        historial_logico = [{"estado": "Ingresado", "fecha": fecha, "usuario": "operador", "nota": "Envío registrado en sistema."}]
+
+        if estado in ["En tránsito", "Entregado", "Visita Fallida"]:
+            historial_logico.append({"estado": "En tránsito", "fecha": fecha, "usuario": "sistema", "nota": "Salida a ruta de reparto."})
+        
+        if estado == "En sucursal":
+            historial_logico.append({"estado": "En sucursal", "fecha": fecha, "usuario": "operador", "nota": "Recepción en sucursal de destino."})
+
+        if estado != "Ingresado":
+            nota_final = "Actualización automática de ejemplo."
+            if estado == "Visita Fallida": nota_final = "Intento de entrega 1: Domicilio cerrado."
+            if estado == "Entregado": nota_final = "Entregado satisfactoriamente."
+            historial_logico.append({"estado": estado, "fecha": fecha, "usuario": "supervisor", "nota": nota_final})
+
+        # 5. Armado final del registro
         nuevo = {
             "tracking_id": tracking,
             "remitente": {
-                "nombre": rem_nom,
-                "dni": rem_dni,
-                "direccion": rem_dir,
-                "telefono": rem_tel,
-                "email": rem_email
+                "nombre": rem_nom, "dni": rem_dni, "direccion": rem_dir,
+                "telefono": rem_tel, "email": rem_email
             },
             "destinatario": {
-                "nombre": dest_nom,
-                "dni": dest_dni,
-                "direccion": dest_dir,
-                "telefono": dest_tel,
-                "email": dest_email
+                "nombre": dest_nom, "dni": dest_dni, "direccion": dest_dir,
+                "telefono": dest_tel, "email": dest_email
             },
             "origen": orig,
             "destino": dst,
             "descripcion": desc,
-            "peso": peso,
+            "peso": peso_num,
             "dimensiones": dim,
             "envio_express": envio_express,
             "estado": estado,
             "fecha_creacion": fecha,
-            "historial": [{"estado": "Ingresado", "fecha": fecha, "usuario": "operador", "nota": "Envío de ejemplo."}],
+            "historial": historial_logico,
             "creado_por": "operador",
             "transportista": transportista,
             "acepta_ley": True,
             "acepta_ley_fecha": fecha,
+            "prioridad": prioridad_ia # <--- LA IA SE APLICA ACÁ
         }
-        if estado != "Ingresado":
-            nuevo["historial"].append({"estado": estado, "fecha": fecha, "usuario": "supervisor", "nota": "Actualización de ejemplo."})
+        
         envios.append(nuevo)
-        registrar_auditoria(tracking, "Creación", "Registro de envío semilla.", "sistema")
+        registrar_auditoria(tracking, "Creación", "Registro de envío semilla con IA y circuito.", "sistema")
+
 
 @app.errorhandler(404)
 def page_not_found(e):

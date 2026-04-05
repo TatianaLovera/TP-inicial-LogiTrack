@@ -15,7 +15,7 @@
             <h3 class="form-section-title">👤 Remitente y Destinatario</h3>
             <div class="form-row">
                 <div class="form-group"><label>Nombre del Remitente <span class="required">*</span></label><input type="text" name="remitente_nombre" value="{{ form.get('remitente_nombre','') }}" required></div>
-                <div class="form-group"><label>DNI del Remitente <span class="required">*</span></label><input type="text" name="remitente_dni" value="{{ form.get('remitente_dni','') }}" pattern="[0-9]+" title="Solo números" placeholder="Ej: 12345678" required></div>
+                <div class="form-group"><label>DNI / CUIL / CUIT del Remitente <span class="required">*</span></label><input type="text" name="remitente_dni" value="{{ form.get('remitente_dni','') }}" pattern="[0-9\-]+" title="Solo números o guiones" placeholder="Ej: 12345678 o 30-12345678-9" required></div>
             </div>
             <div class="form-row">
                 <div class="form-group"><label>Dirección del Remitente <span class="required">*</span></label><input type="text" name="remitente_direccion" value="{{ form.get('remitente_direccion','') }}" placeholder="Calle, número, ciudad, provincia" required></div>
@@ -30,7 +30,7 @@
             </div>
             <div class="form-row">
                 <div class="form-group"><label>Nombre del Destinatario <span class="required">*</span></label><input type="text" name="destinatario_nombre" value="{{ form.get('destinatario_nombre','') }}" required></div>
-                <div class="form-group"><label>DNI del Destinatario <span class="required">*</span></label><input type="text" name="destinatario_dni" value="{{ form.get('destinatario_dni','') }}" pattern="[0-9]+" title="Solo números" placeholder="Ej: 87654321" required></div>
+                <div class="form-group"><label>DNI / CUIL / CUIT del Destinatario <span class="required">*</span></label><input type="text" name="destinatario_dni" value="{{ form.get('destinatario_dni','') }}" pattern="[0-9\-]+" title="Solo números o guiones" placeholder="Ej: 87654321 o 30-87654321-9" required></div>
             </div>
             <div class="form-row">
                 <div class="form-group"><label>Dirección del Destinatario <span class="required">*</span></label><input type="text" name="destinatario_direccion" value="{{ form.get('destinatario_direccion','') }}" placeholder="Calle, número, ciudad, provincia" required></div>
