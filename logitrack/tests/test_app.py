@@ -1866,3 +1866,15 @@ def test_validacion_cuit_cuil_empresas():
     
     # 5. Formatos extraños
     assert validar_dni("30-5000A000-3") is False, "Debe rechazar si contiene letras"
+
+def test_ruta_politica_privacidad(client):
+    """Prueba que la vista de Política de Privacidad y Derechos ARCO cargue correctamente."""
+    response = client.get('/politica-privacidad')
+    
+    # 1. Verificamos que la página cargue bien (Código 200)
+    assert response.status_code == 200, "La ruta de la política de privacidad debe devolver 200 OK"
+    
+    # 2. Verificamos que el texto legal clave esté en el HTML
+    html_content = response.data.decode('utf-8')
+    assert "Derechos ARCO" in html_content, "La página debe mencionar los Derechos ARCO"
+    assert "Ley 25.326" in html_content, "La página debe mencionar la Ley de Protección de Datos"

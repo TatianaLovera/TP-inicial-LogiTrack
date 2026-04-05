@@ -1088,6 +1088,11 @@ def api_predecir_prioridad():
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
+    
+@app.route('/politica-privacidad')
+def politica_privacidad():
+    """Renderiza la vista simulada de la Política de Privacidad y Derechos ARCO."""
+    return render_template('politica.html')
 
 cargar_datos_ejemplo()
 if __name__ == "__main__":

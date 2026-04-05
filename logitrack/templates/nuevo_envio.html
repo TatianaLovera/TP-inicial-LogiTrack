@@ -83,7 +83,7 @@
         <div class="form-section">
             <label class="checkbox-row">
                 <input type="checkbox" name="acepta_ley" {% if form.get('acepta_ley') %}checked{% endif %} required>
-                <span>Acepto términos y política de privacidad (Ley 25.326). <a href="#">Ver política</a>.</span>
+                <span>Acepto términos y política de privacidad (Ley 25.326). <a href="{{ url_for('politica_privacidad') }}" target="_blank" rel="noopener noreferrer">Ver política</a>.</span>
             </label>
         </div>
 
