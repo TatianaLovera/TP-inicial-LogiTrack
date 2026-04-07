@@ -306,4 +306,14 @@ document.addEventListener('DOMContentLoaded', () => {
             sessionStorage.setItem('testDataIndex', currentDatasetIndex);
         });
     }
+
+    const distanciaCells = document.querySelectorAll('.distancia-cell');
+    if (distanciaCells.length) {
+        distanciaCells.forEach(cell => {
+            const minKm = 120;
+            const maxKm = 950;
+            const value = Math.floor(Math.random() * (maxKm - minKm + 1)) + minKm;
+            cell.textContent = `${value} km`;
+        });
+    }
 });

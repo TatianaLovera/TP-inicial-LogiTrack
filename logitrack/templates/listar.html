@@ -62,7 +62,7 @@
                 <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='destino', order='asc' if sort_by == 'destino' and sort_order == 'desc' else 'desc') }}">Destino{% if sort_by == 'destino' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 
                 <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='prioridad', order='asc' if sort_by == 'prioridad' and sort_order == 'desc' else 'desc') }}">Prioridad{% if sort_by == 'prioridad' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
-
+                <th>Distancia</th>
                 <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='estado', order='asc' if sort_by == 'estado' and sort_order == 'desc' else 'desc') }}">Estado{% if sort_by == 'estado' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 <th><a href="{{ url_for('listar_envios', q=busqueda, estado=estado, date_from=date_from, date_to=date_to, sort='peso', order='asc' if sort_by == 'peso' and sort_order == 'desc' else 'desc') }}">Peso{% if sort_by == 'peso' %}{{ ' ↑' if sort_order == 'asc' else ' ↓' }}{% endif %}</a></th>
                 <th>Envío express</th>
@@ -84,6 +84,7 @@
                         {{ envio.prioridad | default('Normal') }}
                     </span>
                 </td>
+                <td class="distancia-cell">-- km</td>
 
                 <td><span class="badge badge-{{ envio.estado | replace(' ', '-') | lower }}">{{ envio.estado }}</span></td>
                 <td>{{ envio.peso }} kg</td>
