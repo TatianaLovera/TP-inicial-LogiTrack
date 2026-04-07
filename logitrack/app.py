@@ -9,7 +9,7 @@ import random
 import re
 from math import ceil
 import pandas as pd
-import re
+import os
 
 app = Flask(__name__)
 app.secret_key = "logitrack-secret-2024"
@@ -1098,6 +1098,9 @@ def politica_privacidad():
     return render_template('politica.html')
 
 cargar_datos_ejemplo()
+
 if __name__ == "__main__":
-    
-    app.run(debug=True)
+    # Render inyecta el puerto automáticamente. Si no lo encuentra (porque estás en tu compu), usa el 5000.
+    port = int(os.environ.get("PORT", 5000))
+    # El host '0.0.0.0' es la llave maestra que le abre la puerta a Render
+    app.run(host="0.0.0.0", port=port)
