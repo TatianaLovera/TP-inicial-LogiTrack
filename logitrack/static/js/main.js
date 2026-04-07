@@ -19,11 +19,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Date filter validation
+// Date filter validation
     const dateFilterForm = document.getElementById('date-filter-form');
     const dateFromInput = document.getElementById('date-from');
     const dateToInput = document.getElementById('date-to');
     const dateError = document.getElementById('date-error');
+
+    // Restauramos tu lógica original para bloquear el calendario en el HTML
     if (dateFromInput && dateToInput) {
         const now = new Date();
         const today = now.toISOString().slice(0, 10);
@@ -35,24 +37,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (dateFilterForm && dateFromInput && dateToInput && dateError) {
         dateFilterForm.addEventListener('submit', e => {
-            dateError.style.display = 'none';
-
             const from = dateFromInput.value;
             const to = dateToInput.value;
             const today = new Date().toISOString().slice(0, 10);
 
-            if (from && to && from > to) {
-                e.preventDefault();
-                dateError.textContent = 'La fecha desde no puede ser mayor que la fecha hasta.';
-                dateError.style.display = 'block';
-                return;
-            }
+            // Función nuclear para apagar cualquier cosa que parezca un spinner
+            const apagarSpinner = () => {
+                const spinners = document.querySelectorAll('#spinner, #loading, #procesando, .spinner-container, .loading-overlay, .loader, [id*="spin"], [class*="spin"], [id*="load"]');
+                spinners.forEach(s => s.style.display = 'none');
+            };
 
-            if ((from && from > today) || (to && to > today)) {
-                e.preventDefault();
-                dateError.textContent = 'No se pueden seleccionar fechas posteriores a hoy.';
+            // Si hay un error en las fechas...
+            if ((from && to && from > to) || (from && from > today) || (to && to > today)) {
+                e.preventDefault(); // 1. Frena el envío al servidor
+                e.stopImmediatePropagation(); // 2. 🛑 NUEVO: Frena CUALQUIER otro script que quiera prender el spinner
+
+                // Mostramos el mensaje correcto
+                if (from > to) {
+                    dateError.textContent = 'La fecha desde no puede ser mayor que la fecha hasta.';
+                } else {
+                    dateError.textContent = 'No se pueden seleccionar fechas posteriores a hoy.';
+                }
                 dateError.style.display = 'block';
-                return;
+
+                // 3. Apagamos el spinner al instante, y de nuevo a los 50ms por si otro script es más lento
+                apagarSpinner();
+                setTimeout(apagarSpinner, 50);
+                
+                return; // Corta la ejecución acá
             }
 
             dateError.style.display = 'none';
