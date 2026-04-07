@@ -222,4 +222,88 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // Cargar datos de prueba con ciclo entre 3 datasets
+    const loadTestDataBtn = document.getElementById('load-test-data');
+    if (loadTestDataBtn) {
+        const testDatasets = [
+            {
+                remitente_nombre: 'Juan Carlos Martínez',
+                remitente_dni: '25456890',
+                remitente_direccion: 'Avenida 9 de Julio 1234, Buenos Aires, CABA',
+                remitente_telefono: '1145678901',
+                remitente_email: 'juan.martinez@example.com',
+                destinatario_nombre: 'Patricia González López',
+                destinatario_dni: '33789012',
+                destinatario_direccion: 'Calle Belgrano 567, Mendoza, Mendoza',
+                destinatario_telefono: '2614567890',
+                destinatario_email: 'patricia.gonzalez@example.com',
+                origen: 'Buenos Aires',
+                destino: 'Mendoza',
+                peso: '1.8',
+                dimensiones: '25x15x10 cm',
+                descripcion: 'Documentos comerciales y muestras'
+            },
+            {
+                remitente_nombre: 'Roberto Fernández Silva',
+                remitente_dni: '23-34313092-9',
+                remitente_direccion: 'Paseo Colón 2890, La Plata, Buenos Aires',
+                remitente_telefono: '3416789012',
+                remitente_email: 'roberto.fernandez@example.com',
+                destinatario_nombre: 'Mariana Rodríguez Díaz',
+                destinatario_dni: '27-34494462-3',
+                destinatario_direccion: 'Ruta 9 km 45, Rosario, Santa Fe',
+                destinatario_telefono: '3815234567',
+                destinatario_email: 'mariana.rodriguez@example.com',
+                origen: 'La Plata',
+                destino: 'Rosario',
+                peso: '3.2',
+                dimensiones: '35x25x20 cm',
+                descripcion: 'Mercadería para distribuición'
+            },
+            {
+                remitente_nombre: 'Luis Alberto Sánchez',
+                remitente_dni: '12345678',
+                remitente_direccion: 'San Martín 450, Córdoba, Córdoba',
+                remitente_telefono: '2214568934',
+                remitente_email: 'luis.sanchez@example.com',
+                destinatario_nombre: 'Claudia María Pérez',
+                destinatario_dni: '23456789',
+                destinatario_direccion: 'Calle Rivadavia 789, Salta, Salta',
+                destinatario_telefono: '2615234890',
+                destinatario_email: 'claudia.perez@example.com',
+                origen: 'Córdoba',
+                destino: 'Salta',
+                peso: '2.5',
+                dimensiones: '30x20x15 cm',
+                descripcion: 'Paquete con artículos varios'
+            }
+        ];
+
+        let currentDatasetIndex = parseInt(sessionStorage.getItem('testDataIndex') || '0');
+
+        loadTestDataBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+            const testData = testDatasets[currentDatasetIndex];
+            
+            // Llenar campos de texto
+            for (const [key, value] of Object.entries(testData)) {
+                const field = document.querySelector(`[name="${key}"]`);
+                if (field) field.value = value;
+            }
+
+            // Marcar radio buttons
+            const envioExpressNo = document.querySelector('input[name="envio_express"][value="off"]');
+            if (envioExpressNo) envioExpressNo.checked = true;
+
+            // Marcar checkbox de aceptación
+            const aceptaLey = document.querySelector('input[name="acepta_ley"]');
+            if (aceptaLey) aceptaLey.checked = true;
+
+            // Cambiar índice para el próximo click
+            currentDatasetIndex = (currentDatasetIndex + 1) % testDatasets.length;
+            sessionStorage.setItem('testDataIndex', currentDatasetIndex);
+        });
+    }
 });
