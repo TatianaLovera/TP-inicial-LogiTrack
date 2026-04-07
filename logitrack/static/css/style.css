@@ -1017,16 +1017,10 @@ body.sidebar-open .main-content {
     .detail-grid { grid-template-columns: 1fr; }
     .form-row    { grid-template-columns: 1fr; }
     .navbar      { padding: 0 1rem; gap: 1rem; }
-    .nav-links   { display: none; }
+    .nav-links   { display: flex; } /* <--- ¡Cambiamos none por flex! */
     .main-content { padding: 1.5rem 1rem; }
     .page-header { flex-direction: column; }
 }
-
-.helper-text{display:block;margin-top:8px;color:#666}
-.pagination{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:16px}
-.disabled{pointer-events:none;opacity:.5}
-.checkbox-row{display:flex;gap:10px;align-items:flex-start}
-.checkbox-row input{margin-top:4px}
 
 
 /* ── ERROR PAGE STYLES (US-12) ── */
