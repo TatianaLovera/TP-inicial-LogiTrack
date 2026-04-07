@@ -70,18 +70,22 @@ def get_usuario_context():
 
 
 def ahora():
-    # Definimos la zona con la ruta completa
-    zona_argentina = datetime.timezone(datetime.timedelta(hours=-3))
-    # Usamos datetime.datetime.now() que es lo que espera Python
-    return datetime.datetime.now(zona_argentina)
+    # 1. Buscamos la hora UTC oficial con la herramienta moderna que pide Python
+    hora_utc = datetime.datetime.now(datetime.timezone.utc)
+    
+    # 2. Le restamos las 3 horas de Argentina
+    hora_arg = hora_utc - datetime.timedelta(hours=3)
+    
+    # 3. Le sacamos la "etiqueta" de zona horaria (.replace(tzinfo=None)) 
+    # para que sea una fecha "ingenua" y no pelee con el resto de tu código.
+    return hora_arg.replace(tzinfo=None)
 
 def ahora_str():
     return ahora().strftime("%d/%m/%Y %H:%M")
 
 def parse_fecha(fecha_str):
-    zona_argentina = datetime.timezone(datetime.timedelta(hours=-3))
-    fecha_naive = datetime.datetime.strptime(fecha_str, "%d/%m/%Y %H:%M")
-    return fecha_naive.replace(tzinfo=zona_argentina)
+    # Volvemos a tu función original que era perfecta
+    return datetime.datetime.strptime(fecha_str, "%d/%m/%Y %H:%M")
 
 
 def puede_editar_envio(envio):
