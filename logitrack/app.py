@@ -70,15 +70,18 @@ def get_usuario_context():
 
 
 def ahora():
-    return datetime.datetime.now()
-
+    # Definimos la zona con la ruta completa
+    zona_argentina = datetime.timezone(datetime.timedelta(hours=-3))
+    # Usamos datetime.datetime.now() que es lo que espera Python
+    return datetime.datetime.now(zona_argentina)
 
 def ahora_str():
     return ahora().strftime("%d/%m/%Y %H:%M")
 
-
 def parse_fecha(fecha_str):
-    return datetime.datetime.strptime(fecha_str, "%d/%m/%Y %H:%M")
+    zona_argentina = datetime.timezone(datetime.timedelta(hours=-3))
+    fecha_naive = datetime.datetime.strptime(fecha_str, "%d/%m/%Y %H:%M")
+    return fecha_naive.replace(tzinfo=zona_argentina)
 
 
 def puede_editar_envio(envio):
@@ -658,7 +661,7 @@ def script_anonimizar():
             evento_cierre = next((h for h in reversed(envio["historial"]) if h["estado"] in ESTADOS_FINALES), None)
             
             if evento_cierre:
-                fecha_cierre = datetime.datetime.strptime(evento_cierre["fecha"], "%d/%m/%Y %H:%M")
+                fecha_cierre = parse_fecha(evento_cierre["fecha"])
                 
                 # Si pasaron más de 30 días desde que se cerró el ciclo
                 if (hoy - fecha_cierre).days > 30:
